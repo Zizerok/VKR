@@ -29,6 +29,7 @@ private:
 private slots:
     void onAddEmployeeClicked();
     void onEmployeeItemDoubleClicked(QListWidgetItem *item);
+    void onManagePositionsClicked();
 };
 
 #endif // BUSINESSMAINWINDOW_H

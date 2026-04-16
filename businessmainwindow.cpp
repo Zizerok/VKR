@@ -2,6 +2,7 @@
 #include "ui_businessmainwindow.h"
 #include "addemployeedialog.h"
 #include "employeecardwindow.h"
+#include "positionmanagementdialog.h"
 
 #include <QListWidgetItem>
 
@@ -84,6 +85,8 @@ void BusinessMainWindow::setupStaffSection()
 
     connect(ui->pushButtonAddEmployee, &QPushButton::clicked,
             this, &BusinessMainWindow::onAddEmployeeClicked);
+    connect(ui->pushButtonManagePositions, &QPushButton::clicked,
+            this, &BusinessMainWindow::onManagePositionsClicked);
     connect(ui->listWidgetEmployees, &QListWidget::itemDoubleClicked,
             this, &BusinessMainWindow::onEmployeeItemDoubleClicked);
     connect(ui->comboBoxEmployeeSort, qOverload<int>(&QComboBox::currentIndexChanged),
@@ -131,4 +134,10 @@ void BusinessMainWindow::onEmployeeItemDoubleClicked(QListWidgetItem *item)
 {
     auto *employeeCardWindow = new EmployeeCardWindow(item->text(), this);
     employeeCardWindow->show();
+}
+
+void BusinessMainWindow::onManagePositionsClicked()
+{
+    PositionManagementDialog dialog(currentBusinessId, this);
+    dialog.exec();
 }

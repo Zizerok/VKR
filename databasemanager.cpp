@@ -88,6 +88,15 @@ void DatabaseManager::createTables()
         ")"
         );
 
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS positions ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "business_id INTEGER NOT NULL,"
+        "name TEXT NOT NULL,"
+        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        ")"
+        );
+
     ensureEmployeeColumn(db, "last_name", "TEXT");
     ensureEmployeeColumn(db, "first_name", "TEXT");
     ensureEmployeeColumn(db, "middle_name", "TEXT");
@@ -192,6 +201,22 @@ QSqlQuery DatabaseManager::getEmployees(int businessId, bool ascending)
     return query;
 }
 
+QSqlQuery DatabaseManager::getPositions(int businessId, bool ascending)
+{
+    QSqlQuery query(db);
+
+    const QString orderBy = ascending ? "ASC" : "DESC";
+    query.prepare(
+        "SELECT id, name FROM positions "
+        "WHERE business_id = ? "
+        "ORDER BY name " + orderBy
+        );
+    query.addBindValue(businessId);
+    query.exec();
+
+    return query;
+}
+
 bool DatabaseManager::createEmployee(int businessId,
                                      const QString& lastName,
                                      const QString& firstName,
@@ -237,6 +262,58 @@ bool DatabaseManager::createEmployee(int businessId,
         qDebug() << "CREATE EMPLOYEE ERROR:" << query.lastError().text();
 
     return ok;
+}
+
+bool DatabaseManager::createPosition(int businessId, const QString& name)
+{
+    QSqlQuery query(db);
+    query.prepare("INSERT INTO positions (business_id, name) VALUES (?, ?)");
+    query.addBindValue(businessId);
+    query.addBindValue(name.trimmed());
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "CREATE POSITION ERROR:" << query.lastError().text();
+
+    return ok;
+}
+
+bool DatabaseManager::updatePosition(int positionId, const QString& name)
+{
+    QSqlQuery query(db);
+    query.prepare("UPDATE positions SET name = ? WHERE id = ?");
+    query.addBindValue(name.trimmed());
+    query.addBindValue(positionId);
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "UPDATE POSITION ERROR:" << query.lastError().text();
+
+    return ok;
+}
+
+bool DatabaseManager::deletePosition(int positionId)
+{
+    QSqlQuery query(db);
+    query.prepare("DELETE FROM positions WHERE id = ?");
+    query.addBindValue(positionId);
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "DELETE POSITION ERROR:" << query.lastError().text();
+
+    return ok;
+}
+
+QStringList DatabaseManager::getPositionNames(int businessId)
+{
+    QStringList positions;
+    QSqlQuery query = getPositions(businessId, true);
+
+    while (query.next())
+        positions << query.value("name").toString();
+
+    return positions;
 }
 
 QSqlDatabase DatabaseManager::database()

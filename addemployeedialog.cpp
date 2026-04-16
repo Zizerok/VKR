@@ -85,9 +85,10 @@ AddEmployeeDialog::AddEmployeeDialog(int businessId, QWidget *parent)
     genderComboBox->addItem("Мужской");
     genderComboBox->addItem("Женский");
 
-    positionComboBox->addItem("Администратор");
-    positionComboBox->addItem("Менеджер");
-    positionComboBox->addItem("Сотрудник");
+    positionComboBox->addItem("Не выбрана");
+    const QStringList positions = DatabaseManager::instance().getPositionNames(currentBusinessId);
+    for (const QString& position : positions)
+        positionComboBox->addItem(position);
 
     lastNameEdit->setPlaceholderText("Введите фамилию");
     firstNameEdit->setPlaceholderText("Введите имя");

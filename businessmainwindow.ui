@@ -273,6 +273,13 @@
               <widget class="QComboBox" name="comboBoxEmployeeSort"/>
              </item>
              <item>
+              <widget class="QPushButton" name="pushButtonManagePositions">
+               <property name="text">
+                <string>Управление должностями</string>
+               </property>
+              </widget>
+             </item>
+             <item>
               <widget class="QPushButton" name="pushButtonAddEmployee">
                <property name="text">
                 <string>Добавить сотрудника</string>
