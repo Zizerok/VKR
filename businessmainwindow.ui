@@ -231,13 +231,70 @@
          </widget>
          <widget class="QWidget" name="pageStaff">
           <layout class="QVBoxLayout" name="verticalLayoutStaff">
+           <property name="spacing">
+            <number>16</number>
+           </property>
+            <item>
+            <layout class="QHBoxLayout" name="staffTopLayout">
+             <item>
+              <widget class="QLabel" name="labelEmployeeListTitle">
+               <property name="font">
+                <font>
+                 <pointsize>14</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>Список сотрудников</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="staffHeaderSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelSortTitle">
+               <property name="text">
+                <string>Сортировка:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="comboBoxEmployeeSort"/>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonAddEmployee">
+               <property name="text">
+                <string>Добавить сотрудника</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
            <item>
-            <widget class="QLabel" name="labelStaffPlaceholder">
+            <widget class="QLabel" name="labelEmployeeCount">
              <property name="text">
-              <string>Раздел управления персоналом</string>
+              <string>Сотрудников: 0</string>
              </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
+            </widget>
+           </item>
+           <item>
+            <widget class="QListWidget" name="listWidgetEmployees">
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+             <property name="selectionMode">
+              <enum>QAbstractItemView::SingleSelection</enum>
              </property>
             </widget>
            </item>
@@ -298,7 +355,7 @@
      <x>0</x>
      <y>0</y>
      <width>1100</width>
-     <height>22</height>
+     <height>21</height>
     </rect>
    </property>
   </widget>

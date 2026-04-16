@@ -10,9 +10,11 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    addemployeedialog.cpp \
     businesslist.cpp \
     businessmainwindow.cpp \
     databasemanager.cpp \
+    employeecardwindow.cpp \
     login.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -20,9 +22,11 @@ SOURCES += \
     security.cpp
 
 HEADERS += \
+    addemployeedialog.h \
     businesslist.h \
     businessmainwindow.h \
     databasemanager.h \
+    employeecardwindow.h \
     login.h \
     mainwindow.h \
     registration.h \

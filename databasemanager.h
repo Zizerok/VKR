@@ -2,6 +2,8 @@
 #define DATABASEMANAGER_H
 
 #include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QDate>
 
 class DatabaseManager
 {
@@ -20,6 +22,16 @@ public:
     QSqlQuery getBusinesses(int ownerId);
     bool createBusiness(int ownerId, const QString& name);
     QString getBusinessName(int businessId);
+    QSqlQuery getEmployees(int businessId, bool ascending = true);
+    bool createEmployee(int businessId,
+                        const QString& lastName,
+                        const QString& firstName,
+                        const QString& middleName,
+                        const QDate& birthDate,
+                        const QString& gender,
+                        const QString& phone,
+                        const QString& vkId,
+                        const QString& position);
 
 private:
     DatabaseManager();

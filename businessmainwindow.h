@@ -2,6 +2,7 @@
 #define BUSINESSMAINWINDOW_H
 
 #include <QMainWindow>
+#include <QListWidgetItem>
 #include "databasemanager.h"
 
 namespace Ui {
@@ -19,8 +20,15 @@ public:
 
 private:
     Ui::BusinessMainWindow *ui;
+    int currentBusinessId = -1;
     void setupNavigation();
     void showSection(int index, const QString& sectionTitle);
+    void setupStaffSection();
+    void loadEmployees();
+
+private slots:
+    void onAddEmployeeClicked();
+    void onEmployeeItemDoubleClicked(QListWidgetItem *item);
 };
 
 #endif // BUSINESSMAINWINDOW_H
