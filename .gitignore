@@ -1,0 +1,29 @@
+build/
+*.pro.user
+*.o
+*.obj
+*.exe
+*.dll
+*.ilk
+*.pdb
+*.idb
+*.log
+*.db-wal
+*.db-shm
+
+# Qt Creator
+*.autosave
+*.creator
+*.creator.user
+*.creator.user.*
+*.files
+*.includes
+*.qmake.stash
+Makefile*
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# OS / editor
+.DS_Store
+Thumbs.db
