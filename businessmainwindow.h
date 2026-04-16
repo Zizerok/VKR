@@ -19,6 +19,8 @@ public:
 
 private:
     Ui::BusinessMainWindow *ui;
+    void setupNavigation();
+    void showSection(int index, const QString& sectionTitle);
 };
 
 #endif // BUSINESSMAINWINDOW_H
