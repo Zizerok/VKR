@@ -234,23 +234,39 @@
            <property name="spacing">
             <number>16</number>
            </property>
-            <item>
-            <layout class="QHBoxLayout" name="staffTopLayout">
+           <item>
+            <layout class="QHBoxLayout" name="staffSwitchLayout">
              <item>
-              <widget class="QLabel" name="labelEmployeeListTitle">
-               <property name="font">
-                <font>
-                 <pointsize>14</pointsize>
-                 <bold>true</bold>
-                </font>
-               </property>
+              <widget class="QPushButton" name="pushButtonStaffEmployeesView">
                <property name="text">
                 <string>Список сотрудников</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+               <property name="autoExclusive">
+                <bool>true</bool>
                </property>
               </widget>
              </item>
              <item>
-              <spacer name="staffHeaderSpacer">
+              <widget class="QPushButton" name="pushButtonStaffPositionsView">
+               <property name="text">
+                <string>Управление должностями</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+               <property name="autoExclusive">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="staffSwitchSpacer">
                <property name="orientation">
                 <enum>Qt::Horizontal</enum>
                </property>
@@ -262,47 +278,146 @@
                </property>
               </spacer>
              </item>
-             <item>
-              <widget class="QLabel" name="labelSortTitle">
-               <property name="text">
-                <string>Сортировка:</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QComboBox" name="comboBoxEmployeeSort"/>
-             </item>
-             <item>
-              <widget class="QPushButton" name="pushButtonManagePositions">
-               <property name="text">
-                <string>Управление должностями</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="pushButtonAddEmployee">
-               <property name="text">
-                <string>Добавить сотрудника</string>
-               </property>
-              </widget>
-             </item>
             </layout>
            </item>
            <item>
-            <widget class="QLabel" name="labelEmployeeCount">
+            <widget class="QLabel" name="labelStaffContentTitle">
+             <property name="font">
+              <font>
+               <pointsize>14</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
              <property name="text">
-              <string>Сотрудников: 0</string>
+              <string>Список сотрудников</string>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QListWidget" name="listWidgetEmployees">
-             <property name="alternatingRowColors">
-              <bool>true</bool>
+            <widget class="QStackedWidget" name="stackedWidgetStaffContent">
+             <property name="currentIndex">
+              <number>0</number>
              </property>
-             <property name="selectionMode">
-              <enum>QAbstractItemView::SingleSelection</enum>
-             </property>
+             <widget class="QWidget" name="pageStaffEmployees">
+              <layout class="QVBoxLayout" name="verticalLayoutStaffEmployees">
+               <property name="spacing">
+                <number>16</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="staffEmployeesTopLayout">
+                 <item>
+                  <widget class="QLabel" name="labelSortTitle">
+                   <property name="text">
+                    <string>Сортировка:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QComboBox" name="comboBoxEmployeeSort"/>
+                 </item>
+                 <item>
+                  <spacer name="staffEmployeesSpacer">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>40</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButtonAddEmployee">
+                   <property name="text">
+                    <string>Добавить сотрудника</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelEmployeeCount">
+                 <property name="text">
+                  <string>Сотрудников: 0</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QListWidget" name="listWidgetEmployees">
+                 <property name="alternatingRowColors">
+                  <bool>true</bool>
+                 </property>
+                 <property name="selectionMode">
+                  <enum>QAbstractItemView::SingleSelection</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="pageStaffPositions">
+              <layout class="QVBoxLayout" name="verticalLayoutStaffPositions">
+               <property name="spacing">
+                <number>16</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="staffPositionsTopLayout">
+                 <item>
+                  <widget class="QPushButton" name="pushButtonAddPosition">
+                   <property name="text">
+                    <string>Добавить должность</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButtonEditPosition">
+                   <property name="text">
+                    <string>Редактировать должность</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButtonDeletePosition">
+                   <property name="text">
+                    <string>Удалить должность</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="staffPositionsSpacer">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>40</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelPositionCount">
+                 <property name="text">
+                  <string>Должностей: 0</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QListWidget" name="listWidgetPositions">
+                 <property name="alternatingRowColors">
+                  <bool>true</bool>
+                 </property>
+                 <property name="selectionMode">
+                  <enum>QAbstractItemView::SingleSelection</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
             </widget>
            </item>
           </layout>

@@ -18,7 +18,7 @@ SOURCES += \
     login.cpp \
     main.cpp \
     mainwindow.cpp \
-    positionmanagementdialog.cpp \
+    positioneditdialog.cpp \
     registration.cpp \
     security.cpp
 
@@ -30,7 +30,7 @@ HEADERS += \
     employeecardwindow.h \
     login.h \
     mainwindow.h \
-    positionmanagementdialog.h \
+    positioneditdialog.h \
     registration.h \
     security.h
 

@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QListWidgetItem>
+#include <QString>
 #include "databasemanager.h"
 
 namespace Ui {
@@ -25,11 +26,15 @@ private:
     void showSection(int index, const QString& sectionTitle);
     void setupStaffSection();
     void loadEmployees();
+    void loadPositions();
+    void showStaffSubsection(int index, const QString& title);
 
 private slots:
     void onAddEmployeeClicked();
     void onEmployeeItemDoubleClicked(QListWidgetItem *item);
-    void onManagePositionsClicked();
+    void onAddPositionClicked();
+    void onEditPositionClicked();
+    void onDeletePositionClicked();
 };
 
 #endif // BUSINESSMAINWINDOW_H

@@ -4,6 +4,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QDate>
+#include <QList>
 #include <QStringList>
 
 class DatabaseManager
@@ -25,6 +26,9 @@ public:
     QString getBusinessName(int businessId);
     QSqlQuery getEmployees(int businessId, bool ascending = true);
     QSqlQuery getPositions(int businessId, bool ascending = true);
+    QSqlQuery getPositionById(int positionId);
+    QList<int> getCoveredPositionIds(int positionId);
+    QStringList getCoveredPositionNames(int positionId);
     bool createEmployee(int businessId,
                         const QString& lastName,
                         const QString& firstName,
@@ -34,8 +38,14 @@ public:
                         const QString& phone,
                         const QString& vkId,
                         const QString& position);
-    bool createPosition(int businessId, const QString& name);
-    bool updatePosition(int positionId, const QString& name);
+    bool createPosition(int businessId,
+                        const QString& name,
+                        const QString& salaryText,
+                        const QList<int>& coveredPositionIds);
+    bool updatePosition(int positionId,
+                        const QString& name,
+                        const QString& salaryText,
+                        const QList<int>& coveredPositionIds);
     bool deletePosition(int positionId);
     QStringList getPositionNames(int businessId);
 
