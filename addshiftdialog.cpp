@@ -3,6 +3,8 @@
 #include <QComboBox>
 #include <QDate>
 #include <QDateEdit>
+#include <QDateTime>
+#include <QDoubleValidator>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -39,24 +41,30 @@ QString paymentSummary(const QString& paymentType,
 }
 }
 
-AddShiftDialog::AddShiftDialog(int businessId, QWidget *parent)
+AddShiftDialog::AddShiftDialog(int businessId, int shiftId, QWidget *parent)
     : QDialog(parent)
     , currentBusinessId(businessId)
+    , currentShiftId(shiftId)
 {
     buildUi();
     loadEmployees();
     loadPositions();
+
+    if (currentShiftId > 0)
+        loadShift();
 }
 
 void AddShiftDialog::buildUi()
 {
-    setWindowTitle("Создание смены");
+    const bool editMode = currentShiftId > 0;
+
+    setWindowTitle(editMode ? "Редактирование смены" : "Создание смены");
     resize(980, 860);
 
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(18);
 
-    auto *titleLabel = new QLabel("Новая смена", this);
+    auto *titleLabel = new QLabel(editMode ? "Редактирование смены" : "Новая смена", this);
     QFont titleFont = titleLabel->font();
     titleFont.setPointSize(16);
     titleFont.setBold(true);
@@ -86,11 +94,16 @@ void AddShiftDialog::buildUi()
     commentEdit = new QTextEdit(this);
     commentEdit->setMinimumHeight(90);
 
+    createdAtEdit = new QLineEdit(this);
+    createdAtEdit->setReadOnly(true);
+    createdAtEdit->setText(QDateTime::currentDateTime().toString("dd.MM.yyyy HH:mm"));
+
     baseLayout->addRow("Дата смены:", shiftDateEdit);
     baseLayout->addRow("Время начала:", startTimeEdit);
     baseLayout->addRow("Время окончания:", endTimeEdit);
     baseLayout->addRow("Статус:", statusComboBox);
     baseLayout->addRow("Комментарий:", commentEdit);
+    baseLayout->addRow("Дата создания:", createdAtEdit);
 
     auto *contentLayout = new QHBoxLayout();
     contentLayout->setSpacing(18);
@@ -117,10 +130,17 @@ void AddShiftDialog::buildUi()
     assignedHourlyRateEdit = new QLineEdit(this);
     assignedFixedRateEdit = new QLineEdit(this);
     assignedPercentRateEdit = new QLineEdit(this);
+    auto *amountValidator = new QDoubleValidator(0.0, 1000000000.0, 2, this);
+    amountValidator->setNotation(QDoubleValidator::StandardNotation);
+    auto *percentValidator = new QDoubleValidator(0.0, 100.0, 2, this);
+    percentValidator->setNotation(QDoubleValidator::StandardNotation);
+    assignedHourlyRateEdit->setValidator(amountValidator);
+    assignedFixedRateEdit->setValidator(amountValidator);
+    assignedPercentRateEdit->setValidator(percentValidator);
 
     assignedHourlyRateEdit->setPlaceholderText("Ставка в час");
     assignedFixedRateEdit->setPlaceholderText("Сумма за смену");
-    assignedPercentRateEdit->setPlaceholderText("Процент");
+    assignedPercentRateEdit->setPlaceholderText("Процент числом");
 
     assignedForm->addRow("Должность:", assignedPositionComboBox);
     assignedForm->addRow("Сотрудник:", assignedEmployeeComboBox);
@@ -164,10 +184,13 @@ void AddShiftDialog::buildUi()
     openHourlyRateEdit = new QLineEdit(this);
     openFixedRateEdit = new QLineEdit(this);
     openPercentRateEdit = new QLineEdit(this);
+    openHourlyRateEdit->setValidator(amountValidator);
+    openFixedRateEdit->setValidator(amountValidator);
+    openPercentRateEdit->setValidator(percentValidator);
 
     openHourlyRateEdit->setPlaceholderText("Ставка в час");
     openFixedRateEdit->setPlaceholderText("Сумма за смену");
-    openPercentRateEdit->setPlaceholderText("Процент");
+    openPercentRateEdit->setPlaceholderText("Процент числом");
 
     openForm->addRow("Должность:", openPositionComboBox);
     openForm->addRow("Количество:", openCountSpinBox);
@@ -193,7 +216,7 @@ void AddShiftDialog::buildUi()
     contentLayout->addWidget(assignedFrame, 1);
     contentLayout->addWidget(openFrame, 1);
 
-    auto *saveButton = new QPushButton("Сохранить смену", this);
+    auto *saveButton = new QPushButton(editMode ? "Сохранить изменения" : "Сохранить смену", this);
 
     connect(assignedPaymentTypeComboBox, &QComboBox::currentTextChanged, this, [this](const QString&) {
         updatePaymentFields(
@@ -264,6 +287,37 @@ void AddShiftDialog::loadPositions()
     }
 }
 
+void AddShiftDialog::loadShift()
+{
+    QSqlQuery query = DatabaseManager::instance().getShiftById(currentShiftId);
+    if (!query.next())
+        return;
+
+    shiftDateEdit->setDate(QDate::fromString(query.value("shift_date").toString(), Qt::ISODate));
+    startTimeEdit->setTime(QTime::fromString(query.value("start_time").toString(), "HH:mm"));
+    endTimeEdit->setTime(QTime::fromString(query.value("end_time").toString(), "HH:mm"));
+
+    const QString status = query.value("status").toString();
+    const int statusIndex = statusComboBox->findText(status);
+    if (statusIndex >= 0)
+        statusComboBox->setCurrentIndex(statusIndex);
+
+    commentEdit->setPlainText(query.value("comment").toString());
+
+    const QString createdAt = query.value("created_at").toString();
+    QDateTime createdAtDateTime = QDateTime::fromString(createdAt, Qt::ISODate);
+    if (!createdAtDateTime.isValid())
+        createdAtDateTime = QDateTime::fromString(createdAt, "yyyy-MM-dd HH:mm:ss");
+    createdAtEdit->setText(createdAtDateTime.isValid()
+                               ? createdAtDateTime.toString("dd.MM.yyyy HH:mm")
+                               : createdAt);
+
+    assignedEmployees = DatabaseManager::instance().getShiftAssignments(currentShiftId);
+    openPositions = DatabaseManager::instance().getShiftOpenPositions(currentShiftId);
+    refreshAssignedList();
+    refreshOpenPositionsList();
+}
+
 void AddShiftDialog::updatePaymentFields(QComboBox *paymentTypeComboBox,
                                          QLineEdit *hourlyRateEdit,
                                          QLineEdit *fixedRateEdit,
@@ -296,7 +350,8 @@ void AddShiftDialog::refreshAssignedList()
         const ShiftAssignedEmployeeData& item = assignedEmployees.at(i);
         auto *listItem = new QListWidgetItem(
             QString("%1 — %2 | %3")
-                .arg(item.positionName, item.employeeName,
+                .arg(item.positionName,
+                     item.employeeName,
                      paymentSummary(item.paymentType, item.hourlyRate, item.fixedRate, item.percentRate)),
             assignedListWidget);
         listItem->setData(Qt::UserRole, i);
@@ -407,19 +462,40 @@ void AddShiftDialog::saveShift()
         return;
     }
 
-    const bool ok = DatabaseManager::instance().createShift(
-        currentBusinessId,
-        shiftDateEdit->date(),
-        startTimeEdit->time(),
-        endTimeEdit->time(),
-        statusComboBox->currentText(),
-        commentEdit->toPlainText(),
-        assignedEmployees,
-        openPositions);
+    bool ok = false;
+    if (currentShiftId > 0)
+    {
+        ok = DatabaseManager::instance().updateShift(
+            currentShiftId,
+            shiftDateEdit->date(),
+            startTimeEdit->time(),
+            endTimeEdit->time(),
+            statusComboBox->currentText(),
+            commentEdit->toPlainText(),
+            assignedEmployees,
+            openPositions);
+    }
+    else
+    {
+        ok = DatabaseManager::instance().createShift(
+            currentBusinessId,
+            shiftDateEdit->date(),
+            startTimeEdit->time(),
+            endTimeEdit->time(),
+            statusComboBox->currentText(),
+            commentEdit->toPlainText(),
+            assignedEmployees,
+            openPositions);
+    }
 
     if (!ok)
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить смену в базу данных.");
+        QMessageBox::critical(
+            this,
+            "Ошибка",
+            currentShiftId > 0
+                ? "Не удалось сохранить изменения смены."
+                : "Не удалось сохранить смену в базу данных.");
         return;
     }
 

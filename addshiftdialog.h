@@ -21,10 +21,11 @@ class AddShiftDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit AddShiftDialog(int businessId, QWidget *parent = nullptr);
+    explicit AddShiftDialog(int businessId, int shiftId = -1, QWidget *parent = nullptr);
 
 private:
     int currentBusinessId;
+    int currentShiftId = -1;
     QList<ShiftAssignedEmployeeData> assignedEmployees;
     QList<ShiftOpenPositionData> openPositions;
 
@@ -33,6 +34,7 @@ private:
     QTimeEdit *endTimeEdit;
     QComboBox *statusComboBox;
     QTextEdit *commentEdit;
+    QLineEdit *createdAtEdit;
 
     QComboBox *assignedPositionComboBox;
     QComboBox *assignedEmployeeComboBox;
@@ -55,6 +57,7 @@ private:
     void buildUi();
     void loadEmployees();
     void loadPositions();
+    void loadShift();
     void updatePaymentFields(QComboBox *paymentTypeComboBox,
                              QLineEdit *hourlyRateEdit,
                              QLineEdit *fixedRateEdit,

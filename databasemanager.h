@@ -29,6 +29,31 @@ struct ShiftOpenPositionData
     QString percentRate;
 };
 
+struct EmployeePaymentSummary
+{
+    int employeeId = -1;
+    QString employeeName;
+    double totalAmount = 0.0;
+    int unpaidAssignments = 0;
+};
+
+struct ShiftPaymentInfo
+{
+    int assignmentId = -1;
+    int shiftId = -1;
+    int employeeId = -1;
+    QString employeeName;
+    QString shiftDate;
+    QString timeRange;
+    QString positionName;
+    QString paymentType;
+    QString hourlyRate;
+    QString fixedRate;
+    QString percentRate;
+    QString revenueAmount;
+    bool isPaid = false;
+};
+
 class DatabaseManager
 {
 public:
@@ -93,10 +118,28 @@ public:
                      const QString& comment,
                      const QList<ShiftAssignedEmployeeData>& assignedEmployees,
                      const QList<ShiftOpenPositionData>& openPositions);
+    QSqlQuery getShiftById(int shiftId);
+    QList<ShiftAssignedEmployeeData> getShiftAssignments(int shiftId);
+    QList<ShiftOpenPositionData> getShiftOpenPositions(int shiftId);
+    bool updateShift(int shiftId,
+                     const QDate& shiftDate,
+                     const QTime& startTime,
+                     const QTime& endTime,
+                     const QString& status,
+                     const QString& comment,
+                     const QList<ShiftAssignedEmployeeData>& assignedEmployees,
+                     const QList<ShiftOpenPositionData>& openPositions);
+    bool deleteShift(int shiftId);
+    QSqlQuery getShiftsForPeriod(int businessId, const QDate& startDate, const QDate& endDate);
     QSqlQuery getShiftsForList(int businessId, const QDate& fromDate);
     QSqlQuery getAllShifts(int businessId);
     QStringList getShiftAssignedSummary(int shiftId);
     QStringList getShiftOpenPositionsSummary(int shiftId);
+    QList<EmployeePaymentSummary> getEmployeePaymentSummaries(int businessId);
+    QList<ShiftPaymentInfo> getEmployeeShiftPayments(int businessId, int employeeId);
+    bool updateShiftAssignmentRevenue(int assignmentId, const QString& revenueAmount);
+    bool markShiftAssignmentPaid(int assignmentId);
+    bool markAllEmployeeAssignmentsPaid(int businessId, int employeeId);
 
 private:
     DatabaseManager();

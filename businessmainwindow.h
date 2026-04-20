@@ -2,11 +2,19 @@
 #define BUSINESSMAINWINDOW_H
 
 #include <QDate>
+#include <QList>
 #include <QListWidgetItem>
 #include <QMainWindow>
 #include <QString>
 
 #include "databasemanager.h"
+
+class QTableWidget;
+class QLabel;
+class QListWidget;
+class QPushButton;
+class QTextEdit;
+class QLineEdit;
 
 namespace Ui {
 class BusinessMainWindow;
@@ -26,13 +34,37 @@ private:
     int currentBusinessId = -1;
     QDate currentShiftDate = QDate::currentDate();
     bool showingShiftArchive = false;
+    QTableWidget *shiftMonthTable = nullptr;
+    int currentDayShiftIndex = 0;
+    QList<int> currentDayShiftIds;
+    QLabel *shiftDayCounterLabel = nullptr;
+    QPushButton *shiftDayPreviousButton = nullptr;
+    QPushButton *shiftDayNextButton = nullptr;
+    QLabel *shiftDayTimeLabel = nullptr;
+    QLabel *shiftDayStatusLabel = nullptr;
+    QLabel *shiftDayAssignedLabel = nullptr;
+    QLabel *shiftDayOpenPositionsLabel = nullptr;
+    QLabel *shiftDayCommentLabel = nullptr;
+    QListWidget *paymentsEmployeeListWidget = nullptr;
+    QListWidget *paymentsShiftListWidget = nullptr;
+    QLabel *paymentsSummaryLabel = nullptr;
+    QLineEdit *paymentsRevenueEdit = nullptr;
+    QPushButton *paymentsSaveRevenueButton = nullptr;
+    QPushButton *paymentsMarkPaidButton = nullptr;
+    QPushButton *paymentsMarkAllPaidButton = nullptr;
+    QList<ShiftPaymentInfo> currentPaymentItems;
 
     void setupNavigation();
     void showSection(int index, const QString& sectionTitle);
 
     void setupShiftsSection();
+    void setupShiftMonthCalendar();
+    void setupShiftDayView();
     void showShiftsSubsection(int index, const QString& title);
     void updateShiftPeriodLabel();
+    void loadShiftMonthCalendar();
+    void loadShiftDayView();
+    void showCurrentDayShift();
     void loadShiftList();
     void updateShiftListMode();
 
@@ -41,11 +73,18 @@ private:
     void loadPositions();
     void showStaffSubsection(int index, const QString& title);
 
+    void setupPaymentsSection();
+    void loadPaymentsEmployees();
+    void loadEmployeePaymentDetails(int employeeId);
+    void updatePaymentRevenueEditor();
+
 private slots:
     void onPreviousShiftPeriodClicked();
     void onNextShiftPeriodClicked();
     void onTodayShiftPeriodClicked();
     void onCreateShiftClicked();
+    void onEditShiftClicked();
+    void onDeleteShiftClicked();
     void onToggleShiftArchiveClicked();
 
     void onAddEmployeeClicked();
@@ -53,6 +92,11 @@ private slots:
     void onAddPositionClicked();
     void onEditPositionClicked();
     void onDeletePositionClicked();
+    void onPaymentEmployeeSelectionChanged();
+    void onPaymentShiftSelectionChanged();
+    void onSavePaymentRevenueClicked();
+    void onMarkPaymentPaidClicked();
+    void onMarkAllPaymentsPaidClicked();
 };
 
 #endif // BUSINESSMAINWINDOW_H
