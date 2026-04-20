@@ -5,7 +5,29 @@
 #include <QSqlQuery>
 #include <QDate>
 #include <QList>
+#include <QTime>
 #include <QStringList>
+
+struct ShiftAssignedEmployeeData
+{
+    int employeeId = -1;
+    QString employeeName;
+    QString positionName;
+    QString paymentType;
+    QString hourlyRate;
+    QString fixedRate;
+    QString percentRate;
+};
+
+struct ShiftOpenPositionData
+{
+    QString positionName;
+    int employeeCount = 1;
+    QString paymentType;
+    QString hourlyRate;
+    QString fixedRate;
+    QString percentRate;
+};
 
 class DatabaseManager
 {
@@ -63,6 +85,18 @@ public:
                         const QList<int>& coveredPositionIds);
     bool deletePosition(int positionId);
     QStringList getPositionNames(int businessId);
+    bool createShift(int businessId,
+                     const QDate& shiftDate,
+                     const QTime& startTime,
+                     const QTime& endTime,
+                     const QString& status,
+                     const QString& comment,
+                     const QList<ShiftAssignedEmployeeData>& assignedEmployees,
+                     const QList<ShiftOpenPositionData>& openPositions);
+    QSqlQuery getShiftsForList(int businessId, const QDate& fromDate);
+    QSqlQuery getAllShifts(int businessId);
+    QStringList getShiftAssignedSummary(int shiftId);
+    QStringList getShiftOpenPositionsSummary(int shiftId);
 
 private:
     DatabaseManager();

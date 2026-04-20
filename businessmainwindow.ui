@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1100</width>
-    <height>700</height>
+    <width>1180</width>
+    <height>760</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -217,14 +217,243 @@
          </property>
          <widget class="QWidget" name="pageShifts">
           <layout class="QVBoxLayout" name="verticalLayoutShifts">
+           <property name="spacing">
+            <number>16</number>
+           </property>
            <item>
-            <widget class="QLabel" name="labelShiftsPlaceholder">
-             <property name="text">
-              <string>Раздел управления сменами</string>
+            <layout class="QHBoxLayout" name="shiftHeaderLayout">
+             <item>
+              <widget class="QPushButton" name="pushButtonCreateShift">
+               <property name="text">
+                <string>Создать смену</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonEditShift">
+               <property name="text">
+                <string>Редактировать</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonDeleteShift">
+               <property name="text">
+                <string>Удалить смену</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="shiftHeaderSpacerLeft">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonShiftMonthView">
+               <property name="text">
+                <string>Месяц</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+               <property name="autoExclusive">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonShiftDayView">
+               <property name="text">
+                <string>День</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+               <property name="autoExclusive">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonShiftListView">
+               <property name="text">
+                <string>Список</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+               <property name="autoExclusive">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="shiftPeriodLayout">
+             <item>
+              <widget class="QPushButton" name="pushButtonShiftPrevious">
+               <property name="text">
+                <string>&lt;</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelShiftCurrentPeriod">
+               <property name="font">
+                <font>
+                 <pointsize>14</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>Апрель 2026</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonShiftNext">
+               <property name="text">
+                <string>&gt;</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonShiftToday">
+               <property name="text">
+                <string>Сегодня</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="shiftHeaderSpacerRight">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="shiftContentHeaderLayout">
+             <item>
+              <widget class="QLabel" name="labelShiftContentTitle">
+               <property name="font">
+                <font>
+                 <pointsize>14</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>Календарь смен на месяц</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="shiftContentHeaderSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QPushButton" name="pushButtonShiftArchiveToggle">
+               <property name="text">
+                <string>Архив смен</string>
+               </property>
+               <property name="visible">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QStackedWidget" name="stackedWidgetShiftContent">
+             <property name="currentIndex">
+              <number>0</number>
              </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
+             <widget class="QWidget" name="pageShiftMonth">
+              <layout class="QVBoxLayout" name="verticalLayoutShiftMonth">
+               <item>
+                <widget class="QLabel" name="labelShiftMonthPlaceholder">
+                 <property name="text">
+                  <string>Здесь будет календарный вид на весь месяц. В каждой ячейке дня можно кратко показать наличие смен.</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="wordWrap">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="pageShiftDay">
+              <layout class="QVBoxLayout" name="verticalLayoutShiftDay">
+               <item>
+                <widget class="QLabel" name="labelShiftDayPlaceholder">
+                 <property name="text">
+                  <string>Здесь будет подробный вид одного дня со сменами, временем, статусом и назначенными сотрудниками.</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="wordWrap">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="pageShiftList">
+              <layout class="QVBoxLayout" name="verticalLayoutShiftList">
+               <property name="spacing">
+                <number>12</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="labelShiftListCount">
+                 <property name="text">
+                  <string>Актуальных смен: 0</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QListWidget" name="listWidgetShiftList">
+                 <property name="alternatingRowColors">
+                  <bool>true</bool>
+                 </property>
+                 <property name="selectionMode">
+                  <enum>QAbstractItemView::SingleSelection</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
             </widget>
            </item>
           </layout>
@@ -476,7 +705,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1100</width>
+     <width>1180</width>
      <height>21</height>
     </rect>
    </property>

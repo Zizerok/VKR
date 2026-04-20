@@ -1,6 +1,8 @@
 #include "businessmainwindow.h"
 #include "ui_businessmainwindow.h"
+
 #include "addemployeedialog.h"
+#include "addshiftdialog.h"
 #include "employeecardwindow.h"
 #include "positioneditdialog.h"
 
@@ -13,6 +15,7 @@ BusinessMainWindow::BusinessMainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     setupNavigation();
+    setupShiftsSection();
     setupStaffSection();
     showSection(0, "Смены");
 }
@@ -26,6 +29,7 @@ BusinessMainWindow::BusinessMainWindow(int currentUserId, int businessId, QWidge
     currentBusinessId = businessId;
 
     setupNavigation();
+    setupShiftsSection();
     setupStaffSection();
 
     const QString name = DatabaseManager::instance().getBusinessName(businessId);
@@ -76,6 +80,142 @@ void BusinessMainWindow::showSection(int index, const QString& sectionTitle)
         ui->pushButtonCommunication->setChecked(true);
     else if (index == 4)
         ui->pushButtonSettings->setChecked(true);
+}
+
+void BusinessMainWindow::setupShiftsSection()
+{
+    connect(ui->pushButtonCreateShift, &QPushButton::clicked,
+            this, &BusinessMainWindow::onCreateShiftClicked);
+    connect(ui->pushButtonShiftArchiveToggle, &QPushButton::clicked,
+            this, &BusinessMainWindow::onToggleShiftArchiveClicked);
+
+    connect(ui->pushButtonShiftMonthView, &QPushButton::clicked, this, [this]() {
+        showShiftsSubsection(0, "Календарь смен на месяц");
+    });
+    connect(ui->pushButtonShiftDayView, &QPushButton::clicked, this, [this]() {
+        showShiftsSubsection(1, "Смены на выбранный день");
+    });
+    connect(ui->pushButtonShiftListView, &QPushButton::clicked, this, [this]() {
+        showShiftsSubsection(2, "Список смен");
+    });
+
+    connect(ui->pushButtonShiftPrevious, &QPushButton::clicked,
+            this, &BusinessMainWindow::onPreviousShiftPeriodClicked);
+    connect(ui->pushButtonShiftNext, &QPushButton::clicked,
+            this, &BusinessMainWindow::onNextShiftPeriodClicked);
+    connect(ui->pushButtonShiftToday, &QPushButton::clicked,
+            this, &BusinessMainWindow::onTodayShiftPeriodClicked);
+
+    showShiftsSubsection(0, "Календарь смен на месяц");
+}
+
+void BusinessMainWindow::showShiftsSubsection(int index, const QString& title)
+{
+    ui->stackedWidgetShiftContent->setCurrentIndex(index);
+
+    if (index != 2)
+        showingShiftArchive = false;
+
+    if (index == 0)
+        ui->pushButtonShiftMonthView->setChecked(true);
+    else if (index == 1)
+        ui->pushButtonShiftDayView->setChecked(true);
+    else if (index == 2)
+        ui->pushButtonShiftListView->setChecked(true);
+
+    ui->pushButtonShiftPrevious->setEnabled(index != 2);
+    ui->pushButtonShiftNext->setEnabled(index != 2);
+    ui->pushButtonShiftArchiveToggle->setVisible(index == 2);
+
+    if (index == 2)
+    {
+        ui->labelShiftContentTitle->setText(showingShiftArchive ? "Архив смен" : "Список смен");
+        loadShiftList();
+    }
+    else
+    {
+        ui->labelShiftContentTitle->setText(title);
+    }
+
+    updateShiftListMode();
+    updateShiftPeriodLabel();
+}
+
+void BusinessMainWindow::updateShiftPeriodLabel()
+{
+    const int shiftViewIndex = ui->stackedWidgetShiftContent->currentIndex();
+
+    if (shiftViewIndex == 0)
+        ui->labelShiftCurrentPeriod->setText(currentShiftDate.toString("MMMM yyyy"));
+    else if (shiftViewIndex == 1)
+        ui->labelShiftCurrentPeriod->setText(currentShiftDate.toString("dd MMMM yyyy"));
+    else
+        ui->labelShiftCurrentPeriod->setText(showingShiftArchive ? "Все смены" : "Актуальные смены");
+}
+
+void BusinessMainWindow::updateShiftListMode()
+{
+    if (ui->stackedWidgetShiftContent->currentIndex() != 2)
+    {
+        ui->pushButtonShiftArchiveToggle->setVisible(false);
+        return;
+    }
+
+    ui->pushButtonShiftArchiveToggle->setVisible(true);
+    ui->pushButtonShiftArchiveToggle->setText(
+        showingShiftArchive ? "Вернуться к списку смен" : "Архив смен");
+}
+
+void BusinessMainWindow::loadShiftList()
+{
+    ui->listWidgetShiftList->clear();
+
+    if (currentBusinessId < 0)
+    {
+        ui->labelShiftListCount->setText(showingShiftArchive ? "Смен в архиве: 0" : "Актуальных смен: 0");
+        return;
+    }
+
+    QSqlQuery query = showingShiftArchive
+        ? DatabaseManager::instance().getAllShifts(currentBusinessId)
+        : DatabaseManager::instance().getShiftsForList(currentBusinessId, QDate::currentDate());
+
+    int count = 0;
+    while (query.next())
+    {
+        const int shiftId = query.value("id").toInt();
+        const QDate shiftDate = QDate::fromString(query.value("shift_date").toString(), Qt::ISODate);
+        const QString timeRange = QString("%1 - %2")
+                                      .arg(query.value("start_time").toString(),
+                                           query.value("end_time").toString());
+        const QString status = query.value("status").toString();
+        const QString comment = query.value("comment").toString().trimmed();
+
+        QStringList lines;
+        lines << QString("%1 | %2 | %3")
+                     .arg(shiftDate.toString("dd.MM.yyyy"), timeRange, status);
+
+        const QStringList assignedSummary = DatabaseManager::instance().getShiftAssignedSummary(shiftId);
+        const QStringList openSummary = DatabaseManager::instance().getShiftOpenPositionsSummary(shiftId);
+
+        lines << QString("Назначены: %1")
+                     .arg(assignedSummary.isEmpty() ? "-" : assignedSummary.join("; "));
+        lines << QString("Свободные позиции: %1")
+                     .arg(openSummary.isEmpty() ? "-" : openSummary.join("; "));
+
+        if (!comment.isEmpty())
+            lines << QString("Комментарий: %1").arg(comment);
+
+        auto *item = new QListWidgetItem(lines.join("\n"));
+        item->setData(Qt::UserRole, shiftId);
+        ui->listWidgetShiftList->addItem(item);
+        ++count;
+    }
+
+    ui->labelShiftListCount->setText(
+        showingShiftArchive
+            ? QString("Смен в архиве: %1").arg(count)
+            : QString("Актуальных смен: %1").arg(count));
 }
 
 void BusinessMainWindow::setupStaffSection()
@@ -181,6 +321,66 @@ void BusinessMainWindow::showStaffSubsection(int index, const QString& title)
         ui->pushButtonStaffEmployeesView->setChecked(true);
     else if (index == 1)
         ui->pushButtonStaffPositionsView->setChecked(true);
+}
+
+void BusinessMainWindow::onPreviousShiftPeriodClicked()
+{
+    const int shiftViewIndex = ui->stackedWidgetShiftContent->currentIndex();
+    if (shiftViewIndex == 2)
+        return;
+
+    if (shiftViewIndex == 0)
+        currentShiftDate = currentShiftDate.addMonths(-1);
+    else
+        currentShiftDate = currentShiftDate.addDays(-1);
+
+    updateShiftPeriodLabel();
+}
+
+void BusinessMainWindow::onNextShiftPeriodClicked()
+{
+    const int shiftViewIndex = ui->stackedWidgetShiftContent->currentIndex();
+    if (shiftViewIndex == 2)
+        return;
+
+    if (shiftViewIndex == 0)
+        currentShiftDate = currentShiftDate.addMonths(1);
+    else
+        currentShiftDate = currentShiftDate.addDays(1);
+
+    updateShiftPeriodLabel();
+}
+
+void BusinessMainWindow::onTodayShiftPeriodClicked()
+{
+    if (ui->stackedWidgetShiftContent->currentIndex() == 2)
+    {
+        showingShiftArchive = false;
+        loadShiftList();
+        updateShiftListMode();
+        updateShiftPeriodLabel();
+        ui->labelShiftContentTitle->setText("Список смен");
+        return;
+    }
+
+    currentShiftDate = QDate::currentDate();
+    updateShiftPeriodLabel();
+}
+
+void BusinessMainWindow::onCreateShiftClicked()
+{
+    AddShiftDialog dialog(currentBusinessId, this);
+    if (dialog.exec() == QDialog::Accepted)
+        loadShiftList();
+}
+
+void BusinessMainWindow::onToggleShiftArchiveClicked()
+{
+    showingShiftArchive = !showingShiftArchive;
+    ui->labelShiftContentTitle->setText(showingShiftArchive ? "Архив смен" : "Список смен");
+    loadShiftList();
+    updateShiftListMode();
+    updateShiftPeriodLabel();
 }
 
 void BusinessMainWindow::onAddEmployeeClicked()

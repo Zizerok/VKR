@@ -112,6 +112,45 @@ void DatabaseManager::createTables()
         ")"
         );
 
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS shifts ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "business_id INTEGER NOT NULL,"
+        "shift_date TEXT NOT NULL,"
+        "start_time TEXT NOT NULL,"
+        "end_time TEXT NOT NULL,"
+        "status TEXT NOT NULL,"
+        "comment TEXT,"
+        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        ")"
+        );
+
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS shift_assignments ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "shift_id INTEGER NOT NULL,"
+        "employee_id INTEGER NOT NULL,"
+        "position_name TEXT NOT NULL,"
+        "payment_type TEXT NOT NULL,"
+        "hourly_rate TEXT,"
+        "fixed_rate TEXT,"
+        "percent_rate TEXT"
+        ")"
+        );
+
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS shift_open_positions ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "shift_id INTEGER NOT NULL,"
+        "position_name TEXT NOT NULL,"
+        "employee_count INTEGER NOT NULL,"
+        "payment_type TEXT NOT NULL,"
+        "hourly_rate TEXT,"
+        "fixed_rate TEXT,"
+        "percent_rate TEXT"
+        ")"
+        );
+
     ensureColumn(db, "employees", "last_name", "TEXT");
     ensureColumn(db, "employees", "first_name", "TEXT");
     ensureColumn(db, "employees", "middle_name", "TEXT");
@@ -538,4 +577,177 @@ QStringList DatabaseManager::getPositionNames(int businessId)
         positions << query.value("name").toString();
 
     return positions;
+}
+
+bool DatabaseManager::createShift(int businessId,
+                                  const QDate& shiftDate,
+                                  const QTime& startTime,
+                                  const QTime& endTime,
+                                  const QString& status,
+                                  const QString& comment,
+                                  const QList<ShiftAssignedEmployeeData>& assignedEmployees,
+                                  const QList<ShiftOpenPositionData>& openPositions)
+{
+    if (!db.transaction())
+        qDebug() << "CREATE SHIFT TRANSACTION START ERROR:" << db.lastError().text();
+
+    QSqlQuery shiftQuery(db);
+    shiftQuery.prepare(
+        "INSERT INTO shifts (business_id, shift_date, start_time, end_time, status, comment) "
+        "VALUES (:business_id, :shift_date, :start_time, :end_time, :status, :comment)"
+        );
+    shiftQuery.bindValue(":business_id", businessId);
+    shiftQuery.bindValue(":shift_date", shiftDate.toString(Qt::ISODate));
+    shiftQuery.bindValue(":start_time", startTime.toString("HH:mm"));
+    shiftQuery.bindValue(":end_time", endTime.toString("HH:mm"));
+    shiftQuery.bindValue(":status", status.trimmed());
+    shiftQuery.bindValue(":comment", comment.trimmed());
+
+    if (!shiftQuery.exec())
+    {
+        qDebug() << "CREATE SHIFT ERROR:" << shiftQuery.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    const int shiftId = shiftQuery.lastInsertId().toInt();
+
+    for (const ShiftAssignedEmployeeData& assignment : assignedEmployees)
+    {
+        QSqlQuery assignmentQuery(db);
+        assignmentQuery.prepare(
+            "INSERT INTO shift_assignments ("
+            "shift_id, employee_id, position_name, payment_type, hourly_rate, fixed_rate, percent_rate"
+            ") VALUES ("
+            ":shift_id, :employee_id, :position_name, :payment_type, :hourly_rate, :fixed_rate, :percent_rate"
+            ")"
+            );
+        assignmentQuery.bindValue(":shift_id", shiftId);
+        assignmentQuery.bindValue(":employee_id", assignment.employeeId);
+        assignmentQuery.bindValue(":position_name", assignment.positionName.trimmed());
+        assignmentQuery.bindValue(":payment_type", assignment.paymentType.trimmed());
+        assignmentQuery.bindValue(":hourly_rate", assignment.hourlyRate.trimmed());
+        assignmentQuery.bindValue(":fixed_rate", assignment.fixedRate.trimmed());
+        assignmentQuery.bindValue(":percent_rate", assignment.percentRate.trimmed());
+
+        if (!assignmentQuery.exec())
+        {
+            qDebug() << "CREATE SHIFT ASSIGNMENT ERROR:" << assignmentQuery.lastError().text();
+            db.rollback();
+            return false;
+        }
+    }
+
+    for (const ShiftOpenPositionData& openPosition : openPositions)
+    {
+        QSqlQuery openPositionQuery(db);
+        openPositionQuery.prepare(
+            "INSERT INTO shift_open_positions ("
+            "shift_id, position_name, employee_count, payment_type, hourly_rate, fixed_rate, percent_rate"
+            ") VALUES ("
+            ":shift_id, :position_name, :employee_count, :payment_type, :hourly_rate, :fixed_rate, :percent_rate"
+            ")"
+            );
+        openPositionQuery.bindValue(":shift_id", shiftId);
+        openPositionQuery.bindValue(":position_name", openPosition.positionName.trimmed());
+        openPositionQuery.bindValue(":employee_count", openPosition.employeeCount);
+        openPositionQuery.bindValue(":payment_type", openPosition.paymentType.trimmed());
+        openPositionQuery.bindValue(":hourly_rate", openPosition.hourlyRate.trimmed());
+        openPositionQuery.bindValue(":fixed_rate", openPosition.fixedRate.trimmed());
+        openPositionQuery.bindValue(":percent_rate", openPosition.percentRate.trimmed());
+
+        if (!openPositionQuery.exec())
+        {
+            qDebug() << "CREATE SHIFT OPEN POSITION ERROR:" << openPositionQuery.lastError().text();
+            db.rollback();
+            return false;
+        }
+    }
+
+    if (!db.commit())
+    {
+        qDebug() << "CREATE SHIFT TRANSACTION COMMIT ERROR:" << db.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    return true;
+}
+
+QSqlQuery DatabaseManager::getShiftsForList(int businessId, const QDate& fromDate)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT id, shift_date, start_time, end_time, status, comment "
+        "FROM shifts "
+        "WHERE business_id = :business_id AND shift_date >= :from_date "
+        "ORDER BY shift_date ASC, start_time ASC"
+        );
+    query.bindValue(":business_id", businessId);
+    query.bindValue(":from_date", fromDate.toString(Qt::ISODate));
+    query.exec();
+    return query;
+}
+
+QSqlQuery DatabaseManager::getAllShifts(int businessId)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT id, shift_date, start_time, end_time, status, comment "
+        "FROM shifts "
+        "WHERE business_id = :business_id "
+        "ORDER BY shift_date DESC, start_time DESC"
+        );
+    query.bindValue(":business_id", businessId);
+    query.exec();
+    return query;
+}
+
+QStringList DatabaseManager::getShiftAssignedSummary(int shiftId)
+{
+    QStringList summary;
+
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT e.full_name, sa.position_name "
+        "FROM shift_assignments sa "
+        "JOIN employees e ON e.id = sa.employee_id "
+        "WHERE sa.shift_id = ? "
+        "ORDER BY sa.position_name ASC, e.full_name ASC"
+        );
+    query.addBindValue(shiftId);
+    query.exec();
+
+    while (query.next())
+    {
+        const QString employeeName = query.value(0).toString();
+        const QString positionName = query.value(1).toString();
+        summary << QString("%1 — %2").arg(positionName, employeeName);
+    }
+
+    return summary;
+}
+
+QStringList DatabaseManager::getShiftOpenPositionsSummary(int shiftId)
+{
+    QStringList summary;
+
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT position_name, employee_count "
+        "FROM shift_open_positions "
+        "WHERE shift_id = ? "
+        "ORDER BY position_name ASC"
+        );
+    query.addBindValue(shiftId);
+    query.exec();
+
+    while (query.next())
+    {
+        summary << QString("%1 — %2")
+                       .arg(query.value("position_name").toString())
+                       .arg(query.value("employee_count").toInt());
+    }
+
+    return summary;
 }

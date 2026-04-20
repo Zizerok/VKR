@@ -11,6 +11,7 @@ CONFIG += c++17
 
 SOURCES += \
     addemployeedialog.cpp \
+    addshiftdialog.cpp \
     businesslist.cpp \
     businessmainwindow.cpp \
     databasemanager.cpp \
@@ -24,6 +25,7 @@ SOURCES += \
 
 HEADERS += \
     addemployeedialog.h \
+    addshiftdialog.h \
     businesslist.h \
     businessmainwindow.h \
     databasemanager.h \
