@@ -25,10 +25,12 @@ public:
     bool createBusiness(int ownerId, const QString& name);
     QString getBusinessName(int businessId);
     QSqlQuery getEmployees(int businessId, bool ascending = true);
+    QSqlQuery getEmployeeById(int employeeId);
     QSqlQuery getPositions(int businessId, bool ascending = true);
     QSqlQuery getPositionById(int positionId);
     QList<int> getCoveredPositionIds(int positionId);
     QStringList getCoveredPositionNames(int positionId);
+    QStringList getCoveredPositionNamesByPositionName(int businessId, const QString& positionName);
     bool createEmployee(int businessId,
                         const QString& lastName,
                         const QString& firstName,
@@ -38,6 +40,19 @@ public:
                         const QString& phone,
                         const QString& vkId,
                         const QString& position);
+    bool updateEmployee(int employeeId,
+                        const QString& lastName,
+                        const QString& firstName,
+                        const QString& middleName,
+                        const QDate& birthDate,
+                        const QString& gender,
+                        const QString& phone,
+                        const QString& vkId,
+                        const QString& position,
+                        bool isActive,
+                        const QDate& hiredDate,
+                        const QString& comment,
+                        const QString& salaryRate);
     bool createPosition(int businessId,
                         const QString& name,
                         const QString& salaryText,

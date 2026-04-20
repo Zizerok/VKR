@@ -84,6 +84,11 @@ void DatabaseManager::createTables()
         "phone TEXT,"
         "vk_id TEXT,"
         "position TEXT,"
+        "is_active INTEGER DEFAULT 1,"
+        "hired_date TEXT,"
+        "comment TEXT,"
+        "salary_rate TEXT,"
+        "photo_path TEXT,"
         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
         ")"
         );
@@ -115,6 +120,11 @@ void DatabaseManager::createTables()
     ensureColumn(db, "employees", "phone", "TEXT");
     ensureColumn(db, "employees", "vk_id", "TEXT");
     ensureColumn(db, "employees", "position", "TEXT");
+    ensureColumn(db, "employees", "is_active", "INTEGER DEFAULT 1");
+    ensureColumn(db, "employees", "hired_date", "TEXT");
+    ensureColumn(db, "employees", "comment", "TEXT");
+    ensureColumn(db, "employees", "salary_rate", "TEXT");
+    ensureColumn(db, "employees", "photo_path", "TEXT");
 
     ensureColumn(db, "positions", "salary", "REAL");
     ensureColumn(db, "positions", "base_position_id", "INTEGER");
@@ -198,6 +208,19 @@ QSqlQuery DatabaseManager::getEmployees(int businessId, bool ascending)
     return query;
 }
 
+QSqlQuery DatabaseManager::getEmployeeById(int employeeId)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT id, business_id, full_name, last_name, first_name, middle_name, birth_date, "
+        "gender, phone, vk_id, position, is_active, hired_date, comment, salary_rate, photo_path "
+        "FROM employees WHERE id = ?"
+        );
+    query.addBindValue(employeeId);
+    query.exec();
+    return query;
+}
+
 QSqlQuery DatabaseManager::getPositions(int businessId, bool ascending)
 {
     QSqlQuery query(db);
@@ -264,6 +287,19 @@ QStringList DatabaseManager::getCoveredPositionNames(int positionId)
     return names;
 }
 
+QStringList DatabaseManager::getCoveredPositionNamesByPositionName(int businessId, const QString& positionName)
+{
+    QSqlQuery positionQuery(db);
+    positionQuery.prepare("SELECT id FROM positions WHERE business_id = ? AND name = ?");
+    positionQuery.addBindValue(businessId);
+    positionQuery.addBindValue(positionName);
+
+    if (!positionQuery.exec() || !positionQuery.next())
+        return {};
+
+    return getCoveredPositionNames(positionQuery.value(0).toInt());
+}
+
 bool DatabaseManager::createEmployee(int businessId,
                                      const QString& lastName,
                                      const QString& firstName,
@@ -287,9 +323,11 @@ bool DatabaseManager::createEmployee(int businessId,
     QSqlQuery query(db);
     query.prepare(
         "INSERT INTO employees ("
-        "business_id, full_name, last_name, first_name, middle_name, birth_date, gender, phone, vk_id, position"
+        "business_id, full_name, last_name, first_name, middle_name, birth_date, gender, phone, vk_id, position, "
+        "is_active, hired_date, comment, salary_rate, photo_path"
         ") VALUES ("
-        ":business_id, :full_name, :last_name, :first_name, :middle_name, :birth_date, :gender, :phone, :vk_id, :position"
+        ":business_id, :full_name, :last_name, :first_name, :middle_name, :birth_date, :gender, :phone, :vk_id, :position, "
+        ":is_active, :hired_date, :comment, :salary_rate, :photo_path"
         ")"
         );
 
@@ -303,10 +341,80 @@ bool DatabaseManager::createEmployee(int businessId,
     query.bindValue(":phone", phone.trimmed());
     query.bindValue(":vk_id", vkId.trimmed());
     query.bindValue(":position", position);
+    query.bindValue(":is_active", 1);
+    query.bindValue(":hired_date", QDate::currentDate().toString(Qt::ISODate));
+    query.bindValue(":comment", "");
+    query.bindValue(":salary_rate", "");
+    query.bindValue(":photo_path", "");
 
     const bool ok = query.exec();
     if (!ok)
         qDebug() << "CREATE EMPLOYEE ERROR:" << query.lastError().text();
+
+    return ok;
+}
+
+bool DatabaseManager::updateEmployee(int employeeId,
+                                     const QString& lastName,
+                                     const QString& firstName,
+                                     const QString& middleName,
+                                     const QDate& birthDate,
+                                     const QString& gender,
+                                     const QString& phone,
+                                     const QString& vkId,
+                                     const QString& position,
+                                     bool isActive,
+                                     const QDate& hiredDate,
+                                     const QString& comment,
+                                     const QString& salaryRate)
+{
+    const QString trimmedLastName = lastName.trimmed();
+    const QString trimmedFirstName = firstName.trimmed();
+    const QString trimmedMiddleName = middleName.trimmed();
+
+    QString fullName = trimmedLastName;
+    if (!trimmedFirstName.isEmpty())
+        fullName += " " + trimmedFirstName;
+    if (!trimmedMiddleName.isEmpty())
+        fullName += " " + trimmedMiddleName;
+
+    QSqlQuery query(db);
+    query.prepare(
+        "UPDATE employees SET "
+        "full_name = :full_name, "
+        "last_name = :last_name, "
+        "first_name = :first_name, "
+        "middle_name = :middle_name, "
+        "birth_date = :birth_date, "
+        "gender = :gender, "
+        "phone = :phone, "
+        "vk_id = :vk_id, "
+        "position = :position, "
+        "is_active = :is_active, "
+        "hired_date = :hired_date, "
+        "comment = :comment, "
+        "salary_rate = :salary_rate "
+        "WHERE id = :id"
+        );
+
+    query.bindValue(":full_name", fullName);
+    query.bindValue(":last_name", trimmedLastName);
+    query.bindValue(":first_name", trimmedFirstName);
+    query.bindValue(":middle_name", trimmedMiddleName);
+    query.bindValue(":birth_date", birthDate.toString(Qt::ISODate));
+    query.bindValue(":gender", gender);
+    query.bindValue(":phone", phone.trimmed());
+    query.bindValue(":vk_id", vkId.trimmed());
+    query.bindValue(":position", position);
+    query.bindValue(":is_active", isActive ? 1 : 0);
+    query.bindValue(":hired_date", hiredDate.toString(Qt::ISODate));
+    query.bindValue(":comment", comment.trimmed());
+    query.bindValue(":salary_rate", salaryRate.trimmed());
+    query.bindValue(":id", employeeId);
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "UPDATE EMPLOYEE ERROR:" << query.lastError().text();
 
     return ok;
 }

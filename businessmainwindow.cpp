@@ -192,7 +192,7 @@ void BusinessMainWindow::onAddEmployeeClicked()
 
 void BusinessMainWindow::onEmployeeItemDoubleClicked(QListWidgetItem *item)
 {
-    auto *employeeCardWindow = new EmployeeCardWindow(item->text(), this);
+    auto *employeeCardWindow = new EmployeeCardWindow(item->data(Qt::UserRole).toInt(), this);
     employeeCardWindow->show();
 }
 
