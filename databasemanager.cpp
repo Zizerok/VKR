@@ -190,6 +190,47 @@ void DatabaseManager::createTables()
         ")"
         );
 
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS notifications ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "business_id INTEGER NOT NULL,"
+        "shift_id INTEGER,"
+        "recipient_type TEXT,"
+        "recipient_label TEXT,"
+        "notification_type TEXT,"
+        "message_text TEXT,"
+        "channel TEXT DEFAULT 'VK',"
+        "send_status TEXT,"
+        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        ")"
+        );
+
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS shift_responses ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "business_id INTEGER NOT NULL,"
+        "shift_id INTEGER,"
+        "vk_id TEXT,"
+        "employee_id INTEGER,"
+        "position_name TEXT,"
+        "response_status TEXT,"
+        "response_message TEXT,"
+        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+        "processed_at TEXT"
+        ")"
+        );
+
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS vk_settings ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "business_id INTEGER UNIQUE NOT NULL,"
+        "group_id TEXT,"
+        "community_token TEXT,"
+        "backend_url TEXT,"
+        "is_enabled INTEGER DEFAULT 0"
+        ")"
+        );
+
     ensureColumn(db, "employees", "last_name", "TEXT");
     ensureColumn(db, "employees", "first_name", "TEXT");
     ensureColumn(db, "employees", "middle_name", "TEXT");
@@ -985,6 +1026,27 @@ QSqlQuery DatabaseManager::getShiftsForList(int businessId, const QDate& fromDat
     return query;
 }
 
+QSqlQuery DatabaseManager::getShiftsWithoutNewShiftNotification(int businessId)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT s.id, s.shift_date, s.start_time, s.end_time, s.status, s.comment "
+        "FROM shifts s "
+        "WHERE s.business_id = :business_id "
+        "AND NOT EXISTS ("
+        "SELECT 1 FROM notifications n "
+        "WHERE n.business_id = s.business_id "
+        "AND n.shift_id = s.id "
+        "AND n.notification_type = :notification_type"
+        ") "
+        "ORDER BY s.shift_date ASC, s.start_time ASC"
+        );
+    query.bindValue(":business_id", businessId);
+    query.bindValue(":notification_type", "Новая смена");
+    query.exec();
+    return query;
+}
+
 QSqlQuery DatabaseManager::getAllShifts(int businessId)
 {
     QSqlQuery query(db);
@@ -1178,4 +1240,165 @@ bool DatabaseManager::markAllEmployeeAssignmentsPaid(int businessId, int employe
     query.bindValue(":employee_id", employeeId);
     query.bindValue(":business_id", businessId);
     return query.exec();
+}
+
+bool DatabaseManager::createNotification(int businessId,
+                                         int shiftId,
+                                         const QString& recipientType,
+                                         const QString& recipientLabel,
+                                         const QString& notificationType,
+                                         const QString& messageText,
+                                         const QString& channel,
+                                         const QString& sendStatus)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "INSERT INTO notifications ("
+        "business_id, shift_id, recipient_type, recipient_label, notification_type, message_text, channel, send_status"
+        ") VALUES ("
+        ":business_id, :shift_id, :recipient_type, :recipient_label, :notification_type, :message_text, :channel, :send_status"
+        ")"
+        );
+    query.bindValue(":business_id", businessId);
+    if (shiftId > 0)
+        query.bindValue(":shift_id", shiftId);
+    else
+        query.bindValue(":shift_id", QVariant(QVariant::Int));
+    query.bindValue(":recipient_type", recipientType.trimmed());
+    query.bindValue(":recipient_label", recipientLabel.trimmed());
+    query.bindValue(":notification_type", notificationType.trimmed());
+    query.bindValue(":message_text", messageText.trimmed());
+    query.bindValue(":channel", channel.trimmed());
+    query.bindValue(":send_status", sendStatus.trimmed());
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "CREATE NOTIFICATION ERROR:" << query.lastError().text();
+    return ok;
+}
+
+QList<NotificationInfo> DatabaseManager::getNotifications(int businessId)
+{
+    QList<NotificationInfo> result;
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT id, shift_id, recipient_type, recipient_label, notification_type, message_text, "
+        "channel, send_status, created_at "
+        "FROM notifications "
+        "WHERE business_id = ? "
+        "ORDER BY created_at DESC, id DESC"
+        );
+    query.addBindValue(businessId);
+    query.exec();
+
+    while (query.next())
+    {
+        NotificationInfo item;
+        item.id = query.value("id").toInt();
+        item.shiftId = query.value("shift_id").isNull() ? -1 : query.value("shift_id").toInt();
+        item.recipientType = query.value("recipient_type").toString();
+        item.recipientLabel = query.value("recipient_label").toString();
+        item.notificationType = query.value("notification_type").toString();
+        item.messageText = query.value("message_text").toString();
+        item.channel = query.value("channel").toString();
+        item.sendStatus = query.value("send_status").toString();
+        item.createdAt = query.value("created_at").toString();
+        result.append(item);
+    }
+
+    return result;
+}
+
+QList<ShiftResponseInfo> DatabaseManager::getShiftResponses(int businessId)
+{
+    QList<ShiftResponseInfo> result;
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT sr.id, sr.shift_id, sr.vk_id, sr.employee_id, e.full_name, sr.position_name, "
+        "sr.response_status, sr.response_message, sr.created_at, sr.processed_at "
+        "FROM shift_responses sr "
+        "LEFT JOIN employees e ON e.id = sr.employee_id "
+        "WHERE sr.business_id = ? "
+        "ORDER BY sr.created_at DESC, sr.id DESC"
+        );
+    query.addBindValue(businessId);
+    query.exec();
+
+    while (query.next())
+    {
+        ShiftResponseInfo item;
+        item.id = query.value("id").toInt();
+        item.shiftId = query.value("shift_id").isNull() ? -1 : query.value("shift_id").toInt();
+        item.vkId = query.value("vk_id").toString();
+        item.employeeId = query.value("employee_id").isNull() ? -1 : query.value("employee_id").toInt();
+        item.employeeName = query.value("full_name").toString();
+        item.positionName = query.value("position_name").toString();
+        item.responseStatus = query.value("response_status").toString();
+        item.responseMessage = query.value("response_message").toString();
+        item.createdAt = query.value("created_at").toString();
+        item.processedAt = query.value("processed_at").toString();
+        result.append(item);
+    }
+
+    return result;
+}
+
+bool DatabaseManager::saveVkSettings(int businessId, const VkSettingsData& settings)
+{
+    QSqlQuery existsQuery(db);
+    existsQuery.prepare("SELECT id FROM vk_settings WHERE business_id = ?");
+    existsQuery.addBindValue(businessId);
+
+    QSqlQuery query(db);
+    if (existsQuery.exec() && existsQuery.next())
+    {
+        query.prepare(
+            "UPDATE vk_settings SET "
+            "group_id = :group_id, "
+            "community_token = :community_token, "
+            "backend_url = :backend_url, "
+            "is_enabled = :is_enabled "
+            "WHERE business_id = :business_id"
+            );
+    }
+    else
+    {
+        query.prepare(
+            "INSERT INTO vk_settings (business_id, group_id, community_token, backend_url, is_enabled) "
+            "VALUES (:business_id, :group_id, :community_token, :backend_url, :is_enabled)"
+            );
+    }
+
+    query.bindValue(":business_id", businessId);
+    query.bindValue(":group_id", settings.groupId.trimmed());
+    query.bindValue(":community_token", settings.communityToken.trimmed());
+    query.bindValue(":backend_url", settings.backendUrl.trimmed());
+    query.bindValue(":is_enabled", settings.isEnabled ? 1 : 0);
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "SAVE VK SETTINGS ERROR:" << query.lastError().text();
+    return ok;
+}
+
+VkSettingsData DatabaseManager::getVkSettings(int businessId)
+{
+    VkSettingsData settings;
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT group_id, community_token, backend_url, is_enabled "
+        "FROM vk_settings "
+        "WHERE business_id = ?"
+        );
+    query.addBindValue(businessId);
+
+    if (query.exec() && query.next())
+    {
+        settings.groupId = query.value("group_id").toString();
+        settings.communityToken = query.value("community_token").toString();
+        settings.backendUrl = query.value("backend_url").toString();
+        settings.isEnabled = query.value("is_enabled").toInt() == 1;
+    }
+
+    return settings;
 }

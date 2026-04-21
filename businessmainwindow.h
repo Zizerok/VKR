@@ -16,6 +16,8 @@ class QListWidget;
 class QPushButton;
 class QTextEdit;
 class QLineEdit;
+class QTabWidget;
+class QCheckBox;
 
 namespace Ui {
 class BusinessMainWindow;
@@ -55,6 +57,22 @@ private:
     QPushButton *paymentsMarkPaidButton = nullptr;
     QPushButton *paymentsMarkAllPaidButton = nullptr;
     QList<ShiftPaymentInfo> currentPaymentItems;
+    QTabWidget *communicationTabWidget = nullptr;
+    QComboBox *messageTypeComboBox = nullptr;
+    QComboBox *messageShiftComboBox = nullptr;
+    QComboBox *messageRecipientTypeComboBox = nullptr;
+    QComboBox *messageEmployeeComboBox = nullptr;
+    QComboBox *messagePositionComboBox = nullptr;
+    QTextEdit *messageTextEdit = nullptr;
+    QPushButton *sendMessageButton = nullptr;
+    QPushButton *clearMessageButton = nullptr;
+    QListWidget *notificationsHistoryListWidget = nullptr;
+    QListWidget *shiftResponsesListWidget = nullptr;
+    QLineEdit *vkGroupIdEdit = nullptr;
+    QLineEdit *vkCommunityTokenEdit = nullptr;
+    QLineEdit *vkBackendUrlEdit = nullptr;
+    QCheckBox *vkEnabledCheckBox = nullptr;
+    QLabel *vkConnectionStatusLabel = nullptr;
 
     void setupNavigation();
     void showSection(int index, const QString& sectionTitle);
@@ -80,6 +98,16 @@ private:
     void loadEmployeePaymentDetails(int employeeId);
     void updatePaymentRevenueEditor();
     bool paymentMatchesCurrentFilter(const ShiftPaymentInfo& payment) const;
+    void setupCommunicationSection();
+    void loadMessageRecipients();
+    void loadUnnotifiedShiftOptions();
+    void updateMessageTypeControls();
+    void updateMessageRecipientControls();
+    QString buildShiftNotificationText(int shiftId) const;
+    void loadNotificationsHistory();
+    void loadShiftResponses();
+    void setupSettingsSection();
+    void loadVkSettings();
 
 private slots:
     void onPreviousShiftPeriodClicked();
@@ -101,6 +129,11 @@ private slots:
     void onSavePaymentRevenueClicked();
     void onMarkPaymentPaidClicked();
     void onMarkAllPaymentsPaidClicked();
+    void onSendMessageClicked();
+    void onClearMessageClicked();
+    void onRefreshShiftResponsesClicked();
+    void onSaveVkSettingsClicked();
+    void onCheckVkConnectionClicked();
 };
 
 #endif // BUSINESSMAINWINDOW_H

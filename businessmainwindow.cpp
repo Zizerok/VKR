@@ -7,9 +7,11 @@
 #include "positioneditdialog.h"
 
 #include <QColor>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDoubleValidator>
+#include <QFormLayout>
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -23,6 +25,8 @@
 #include <QSet>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTabWidget>
+#include <QTextEdit>
 #include <QTime>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -95,6 +99,8 @@ BusinessMainWindow::BusinessMainWindow(QWidget *parent)
     setupShiftsSection();
     setupStaffSection();
     setupPaymentsSection();
+    setupCommunicationSection();
+    setupSettingsSection();
     showSection(0, "Смены");
 }
 
@@ -110,6 +116,8 @@ BusinessMainWindow::BusinessMainWindow(int currentUserId, int businessId, QWidge
     setupShiftsSection();
     setupStaffSection();
     setupPaymentsSection();
+    setupCommunicationSection();
+    setupSettingsSection();
 
     ui->labelBusinessTitle->setText(DatabaseManager::instance().getBusinessName(businessId));
     showSection(0, "Смены");
@@ -676,6 +684,349 @@ void BusinessMainWindow::setupPaymentsSection()
     loadPaymentsEmployees();
 }
 
+void BusinessMainWindow::setupCommunicationSection()
+{
+    ui->labelCommunicationPlaceholder->hide();
+
+    communicationTabWidget = new QTabWidget(this);
+
+    auto *messagesPage = new QWidget(this);
+    auto *messagesLayout = new QHBoxLayout(messagesPage);
+    messagesLayout->setSpacing(16);
+
+    auto *messageFormFrame = new QFrame(messagesPage);
+    auto *messageFormLayout = new QVBoxLayout(messageFormFrame);
+    messageFormLayout->setSpacing(12);
+
+    auto *messageTitle = new QLabel("Новое сообщение", messageFormFrame);
+    QFont titleFont = messageTitle->font();
+    titleFont.setBold(true);
+    titleFont.setPointSize(13);
+    messageTitle->setFont(titleFont);
+
+    auto *messageForm = new QFormLayout();
+    messageTypeComboBox = new QComboBox(messageFormFrame);
+    messageTypeComboBox->addItems({"Общее объявление", "Новая смена", "Изменение смены", "Отмена смены", "Выплата"});
+    messageShiftComboBox = new QComboBox(messageFormFrame);
+    messageRecipientTypeComboBox = new QComboBox(messageFormFrame);
+    messageRecipientTypeComboBox->addItems({"Все сотрудники", "Конкретный сотрудник", "По должности"});
+    messageEmployeeComboBox = new QComboBox(messageFormFrame);
+    messagePositionComboBox = new QComboBox(messageFormFrame);
+    messageTextEdit = new QTextEdit(messageFormFrame);
+    messageTextEdit->setMinimumHeight(140);
+    messageTextEdit->setPlaceholderText("Введите текст уведомления для сотрудников");
+
+    messageForm->addRow("Тип сообщения:", messageTypeComboBox);
+    messageForm->addRow("Смена:", messageShiftComboBox);
+    messageForm->addRow("Получатели:", messageRecipientTypeComboBox);
+    messageForm->addRow("Сотрудник:", messageEmployeeComboBox);
+    messageForm->addRow("Должность:", messagePositionComboBox);
+    messageForm->addRow("Текст:", messageTextEdit);
+
+    auto *messageButtonsLayout = new QHBoxLayout();
+    sendMessageButton = new QPushButton("Отправить", messageFormFrame);
+    clearMessageButton = new QPushButton("Очистить", messageFormFrame);
+    messageButtonsLayout->addWidget(sendMessageButton);
+    messageButtonsLayout->addWidget(clearMessageButton);
+
+    messageFormLayout->addWidget(messageTitle);
+    messageFormLayout->addLayout(messageForm);
+    messageFormLayout->addLayout(messageButtonsLayout);
+    messageFormLayout->addStretch();
+
+    auto *historyFrame = new QFrame(messagesPage);
+    auto *historyLayout = new QVBoxLayout(historyFrame);
+    historyLayout->setSpacing(12);
+    auto *historyTitle = new QLabel("История уведомлений", historyFrame);
+    historyTitle->setFont(titleFont);
+    notificationsHistoryListWidget = new QListWidget(historyFrame);
+    notificationsHistoryListWidget->setAlternatingRowColors(true);
+    historyLayout->addWidget(historyTitle);
+    historyLayout->addWidget(notificationsHistoryListWidget, 1);
+
+    messagesLayout->addWidget(messageFormFrame, 1);
+    messagesLayout->addWidget(historyFrame, 1);
+
+    auto *responsesPage = new QWidget(this);
+    auto *responsesLayout = new QVBoxLayout(responsesPage);
+    responsesLayout->setSpacing(12);
+    auto *responsesHeaderLayout = new QHBoxLayout();
+    auto *responsesTitle = new QLabel("Отклики на свободные позиции", responsesPage);
+    responsesTitle->setFont(titleFont);
+    auto *refreshResponsesButton = new QPushButton("Обновить", responsesPage);
+    responsesHeaderLayout->addWidget(responsesTitle);
+    responsesHeaderLayout->addStretch();
+    responsesHeaderLayout->addWidget(refreshResponsesButton);
+    shiftResponsesListWidget = new QListWidget(responsesPage);
+    shiftResponsesListWidget->setAlternatingRowColors(true);
+    responsesLayout->addLayout(responsesHeaderLayout);
+    responsesLayout->addWidget(shiftResponsesListWidget, 1);
+
+    communicationTabWidget->addTab(messagesPage, "Сообщения");
+    communicationTabWidget->addTab(responsesPage, "Отклики на смены");
+    ui->verticalLayoutCommunication->addWidget(communicationTabWidget);
+
+    connect(messageRecipientTypeComboBox, &QComboBox::currentTextChanged,
+            this, [this](const QString&) { updateMessageRecipientControls(); });
+    connect(messageTypeComboBox, &QComboBox::currentTextChanged,
+            this, [this](const QString&) { updateMessageTypeControls(); });
+    connect(messageShiftComboBox, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+                if (messageTypeComboBox && messageTypeComboBox->currentText() == "Новая смена")
+                    messageTextEdit->setPlainText(buildShiftNotificationText(messageShiftComboBox->currentData().toInt()));
+            });
+    connect(sendMessageButton, &QPushButton::clicked, this, &BusinessMainWindow::onSendMessageClicked);
+    connect(clearMessageButton, &QPushButton::clicked, this, &BusinessMainWindow::onClearMessageClicked);
+    connect(refreshResponsesButton, &QPushButton::clicked, this, &BusinessMainWindow::onRefreshShiftResponsesClicked);
+
+    loadMessageRecipients();
+    loadUnnotifiedShiftOptions();
+    updateMessageTypeControls();
+    updateMessageRecipientControls();
+    loadNotificationsHistory();
+    loadShiftResponses();
+}
+
+void BusinessMainWindow::loadMessageRecipients()
+{
+    if (!messageEmployeeComboBox || !messagePositionComboBox)
+        return;
+
+    messageEmployeeComboBox->clear();
+    messagePositionComboBox->clear();
+
+    if (currentBusinessId < 0)
+        return;
+
+    QSqlQuery employees = DatabaseManager::instance().getEmployees(currentBusinessId, true);
+    while (employees.next())
+        messageEmployeeComboBox->addItem(employees.value("full_name").toString(), employees.value("id"));
+
+    const QStringList positions = DatabaseManager::instance().getPositionNames(currentBusinessId);
+    for (const QString& position : positions)
+        messagePositionComboBox->addItem(position);
+}
+
+void BusinessMainWindow::loadUnnotifiedShiftOptions()
+{
+    if (!messageShiftComboBox)
+        return;
+
+    messageShiftComboBox->clear();
+    if (currentBusinessId < 0)
+        return;
+
+    QSqlQuery query = DatabaseManager::instance().getShiftsWithoutNewShiftNotification(currentBusinessId);
+    while (query.next())
+    {
+        const int shiftId = query.value("id").toInt();
+        const QDate shiftDate = QDate::fromString(query.value("shift_date").toString(), Qt::ISODate);
+        const QString label = QString("%1 | %2-%3 | %4")
+                                  .arg(shiftDate.toString("dd.MM.yyyy"),
+                                       query.value("start_time").toString(),
+                                       query.value("end_time").toString(),
+                                       query.value("status").toString());
+        messageShiftComboBox->addItem(label, shiftId);
+    }
+}
+
+void BusinessMainWindow::updateMessageTypeControls()
+{
+    if (!messageTypeComboBox || !messageShiftComboBox)
+        return;
+
+    const bool isNewShiftMessage = messageTypeComboBox->currentText() == "Новая смена";
+    messageShiftComboBox->setEnabled(isNewShiftMessage);
+    messageShiftComboBox->setVisible(isNewShiftMessage);
+
+    if (isNewShiftMessage)
+    {
+        loadUnnotifiedShiftOptions();
+        messageRecipientTypeComboBox->setCurrentIndex(0);
+        messageTextEdit->setPlainText(buildShiftNotificationText(messageShiftComboBox->currentData().toInt()));
+    }
+    else if (messageTextEdit && messageTextEdit->toPlainText().startsWith("Открыта новая смена"))
+    {
+        messageTextEdit->clear();
+    }
+}
+
+void BusinessMainWindow::updateMessageRecipientControls()
+{
+    if (!messageRecipientTypeComboBox)
+        return;
+
+    const QString recipientType = messageRecipientTypeComboBox->currentText();
+    if (messageEmployeeComboBox)
+        messageEmployeeComboBox->setEnabled(recipientType == "Конкретный сотрудник");
+    if (messagePositionComboBox)
+        messagePositionComboBox->setEnabled(recipientType == "По должности");
+}
+
+QString BusinessMainWindow::buildShiftNotificationText(int shiftId) const
+{
+    if (shiftId <= 0)
+        return "";
+
+    QSqlQuery query = DatabaseManager::instance().getShiftById(shiftId);
+    if (!query.next())
+        return "";
+
+    const QDate shiftDate = QDate::fromString(query.value("shift_date").toString(), Qt::ISODate);
+    QStringList lines;
+    lines << "Открыта новая смена.";
+    lines << QString("Дата: %1").arg(shiftDate.toString("dd.MM.yyyy"));
+    lines << QString("Время: %1-%2")
+                 .arg(query.value("start_time").toString(),
+                      query.value("end_time").toString());
+
+    const QStringList assigned = DatabaseManager::instance().getShiftAssignedSummary(shiftId);
+    const QStringList openPositions = DatabaseManager::instance().getShiftOpenPositionsSummary(shiftId);
+
+    if (!assigned.isEmpty())
+        lines << QString("Уже назначены: %1").arg(assigned.join("; "));
+    if (!openPositions.isEmpty())
+        lines << QString("Свободные позиции: %1").arg(openPositions.join("; "));
+
+    const QString comment = query.value("comment").toString().trimmed();
+    if (!comment.isEmpty())
+        lines << QString("Комментарий: %1").arg(comment);
+
+    lines << QString("Для отклика нажмите кнопку в VK-боте или отправьте: Хочу смену %1").arg(shiftId);
+    return lines.join("\n");
+}
+
+void BusinessMainWindow::loadNotificationsHistory()
+{
+    if (!notificationsHistoryListWidget)
+        return;
+
+    notificationsHistoryListWidget->clear();
+    if (currentBusinessId < 0)
+        return;
+
+    const QList<NotificationInfo> notifications = DatabaseManager::instance().getNotifications(currentBusinessId);
+    for (const NotificationInfo& notification : notifications)
+    {
+        QStringList lines;
+        lines << QString("%1 | %2 | %3")
+                     .arg(formatPaymentDate(notification.createdAt),
+                          notification.channel,
+                          notification.sendStatus);
+        lines << QString("Тип: %1").arg(notification.notificationType);
+        lines << QString("Получатели: %1").arg(notification.recipientLabel);
+        lines << QString("Текст: %1").arg(notification.messageText);
+        if (notification.shiftId > 0)
+            lines << QString("Смена ID: %1").arg(notification.shiftId);
+
+        notificationsHistoryListWidget->addItem(new QListWidgetItem(lines.join("\n")));
+    }
+}
+
+void BusinessMainWindow::loadShiftResponses()
+{
+    if (!shiftResponsesListWidget)
+        return;
+
+    shiftResponsesListWidget->clear();
+    if (currentBusinessId < 0)
+        return;
+
+    const QList<ShiftResponseInfo> responses = DatabaseManager::instance().getShiftResponses(currentBusinessId);
+    if (responses.isEmpty())
+    {
+        shiftResponsesListWidget->addItem("Откликов пока нет. Позже сюда будут попадать ответы сотрудников из VK-бота.");
+        return;
+    }
+
+    for (const ShiftResponseInfo& response : responses)
+    {
+        QStringList lines;
+        lines << QString("%1 | Смена ID: %2 | %3")
+                     .arg(formatPaymentDate(response.createdAt))
+                     .arg(response.shiftId)
+                     .arg(response.positionName);
+        lines << QString("Сотрудник: %1").arg(response.employeeName.isEmpty() ? "Не найден" : response.employeeName);
+        lines << QString("VK ID: %1").arg(response.vkId.isEmpty() ? "-" : response.vkId);
+        lines << QString("Статус: %1").arg(response.responseStatus);
+        if (!response.responseMessage.trimmed().isEmpty())
+            lines << QString("Комментарий: %1").arg(response.responseMessage);
+
+        shiftResponsesListWidget->addItem(new QListWidgetItem(lines.join("\n")));
+    }
+}
+
+void BusinessMainWindow::setupSettingsSection()
+{
+    ui->labelSettingsPlaceholder->hide();
+
+    auto *settingsFrame = new QFrame(this);
+    auto *settingsLayout = new QVBoxLayout(settingsFrame);
+    settingsLayout->setSpacing(14);
+
+    auto *titleLabel = new QLabel("Настройки VK-интеграции", settingsFrame);
+    QFont titleFont = titleLabel->font();
+    titleFont.setBold(true);
+    titleFont.setPointSize(13);
+    titleLabel->setFont(titleFont);
+
+    auto *descriptionLabel = new QLabel(
+        "Эти параметры будут использоваться для связи desktop-приложения с VK-ботом сообщества и backend-сервером.",
+        settingsFrame);
+    descriptionLabel->setWordWrap(true);
+
+    auto *formLayout = new QFormLayout();
+    vkGroupIdEdit = new QLineEdit(settingsFrame);
+    vkGroupIdEdit->setPlaceholderText("Например: 123456789");
+    vkCommunityTokenEdit = new QLineEdit(settingsFrame);
+    vkCommunityTokenEdit->setPlaceholderText("Токен сообщества VK");
+    vkCommunityTokenEdit->setEchoMode(QLineEdit::Password);
+    vkBackendUrlEdit = new QLineEdit(settingsFrame);
+    vkBackendUrlEdit->setPlaceholderText("https://example.ru/vk/callback");
+    vkEnabledCheckBox = new QCheckBox("Интеграция включена", settingsFrame);
+
+    formLayout->addRow("ID группы VK:", vkGroupIdEdit);
+    formLayout->addRow("Токен сообщества:", vkCommunityTokenEdit);
+    formLayout->addRow("URL backend-сервера:", vkBackendUrlEdit);
+    formLayout->addRow("", vkEnabledCheckBox);
+
+    auto *buttonsLayout = new QHBoxLayout();
+    auto *saveSettingsButton = new QPushButton("Сохранить настройки", settingsFrame);
+    auto *checkConnectionButton = new QPushButton("Проверить подключение", settingsFrame);
+    buttonsLayout->addWidget(saveSettingsButton);
+    buttonsLayout->addWidget(checkConnectionButton);
+    buttonsLayout->addStretch();
+
+    vkConnectionStatusLabel = new QLabel("Статус: настройки не проверялись", settingsFrame);
+    vkConnectionStatusLabel->setWordWrap(true);
+
+    settingsLayout->addWidget(titleLabel);
+    settingsLayout->addWidget(descriptionLabel);
+    settingsLayout->addLayout(formLayout);
+    settingsLayout->addLayout(buttonsLayout);
+    settingsLayout->addWidget(vkConnectionStatusLabel);
+    settingsLayout->addStretch();
+
+    ui->verticalLayoutSettings->addWidget(settingsFrame);
+
+    connect(saveSettingsButton, &QPushButton::clicked, this, &BusinessMainWindow::onSaveVkSettingsClicked);
+    connect(checkConnectionButton, &QPushButton::clicked, this, &BusinessMainWindow::onCheckVkConnectionClicked);
+
+    loadVkSettings();
+}
+
+void BusinessMainWindow::loadVkSettings()
+{
+    if (currentBusinessId < 0 || !vkGroupIdEdit || !vkCommunityTokenEdit || !vkBackendUrlEdit || !vkEnabledCheckBox)
+        return;
+
+    const VkSettingsData settings = DatabaseManager::instance().getVkSettings(currentBusinessId);
+    vkGroupIdEdit->setText(settings.groupId);
+    vkCommunityTokenEdit->setText(settings.communityToken);
+    vkBackendUrlEdit->setText(settings.backendUrl);
+    vkEnabledCheckBox->setChecked(settings.isEnabled);
+}
+
 void BusinessMainWindow::loadPaymentsEmployees()
 {
     paymentsEmployeeListWidget->clear();
@@ -824,6 +1175,7 @@ void BusinessMainWindow::onCreateShiftClicked()
         loadShiftDayView();
         loadShiftList();
         loadPaymentsEmployees();
+        loadUnnotifiedShiftOptions();
     }
 }
 
@@ -849,6 +1201,7 @@ void BusinessMainWindow::onEditShiftClicked()
         loadShiftDayView();
         loadShiftList();
         loadPaymentsEmployees();
+        loadUnnotifiedShiftOptions();
     }
 }
 
@@ -880,6 +1233,7 @@ void BusinessMainWindow::onDeleteShiftClicked()
     loadShiftDayView();
     loadShiftList();
     loadPaymentsEmployees();
+    loadUnnotifiedShiftOptions();
 }
 
 void BusinessMainWindow::onToggleShiftArchiveClicked()
@@ -898,6 +1252,7 @@ void BusinessMainWindow::onAddEmployeeClicked()
     {
         loadEmployees();
         loadPaymentsEmployees();
+        loadMessageRecipients();
     }
 }
 
@@ -930,6 +1285,7 @@ void BusinessMainWindow::onAddPositionClicked()
     }
 
     loadPositions();
+    loadMessageRecipients();
 }
 
 void BusinessMainWindow::onEditPositionClicked()
@@ -962,6 +1318,7 @@ void BusinessMainWindow::onEditPositionClicked()
     }
 
     loadPositions();
+    loadMessageRecipients();
 }
 
 void BusinessMainWindow::onDeletePositionClicked()
@@ -986,6 +1343,7 @@ void BusinessMainWindow::onDeletePositionClicked()
     }
 
     loadPositions();
+    loadMessageRecipients();
 }
 
 void BusinessMainWindow::onPaymentEmployeeSelectionChanged()
@@ -1175,5 +1533,131 @@ void BusinessMainWindow::onMarkAllPaymentsPaidClicked()
             paymentsEmployeeListWidget->setCurrentRow(i);
             break;
         }
+    }
+}
+
+void BusinessMainWindow::onSendMessageClicked()
+{
+    if (currentBusinessId < 0)
+        return;
+
+    const bool isNewShiftMessage = messageTypeComboBox && messageTypeComboBox->currentText() == "Новая смена";
+    const int shiftId = isNewShiftMessage && messageShiftComboBox
+        ? messageShiftComboBox->currentData().toInt()
+        : -1;
+
+    if (isNewShiftMessage && shiftId <= 0)
+    {
+        QMessageBox::warning(this, "Коммуникация", "Нет смен без уведомления. Создайте новую смену или выберите другой тип сообщения.");
+        return;
+    }
+
+    QString messageText = messageTextEdit ? messageTextEdit->toPlainText().trimmed() : QString();
+    if (isNewShiftMessage && messageText.isEmpty())
+    {
+        messageText = buildShiftNotificationText(shiftId);
+        messageTextEdit->setPlainText(messageText);
+    }
+
+    if (messageText.isEmpty())
+    {
+        QMessageBox::warning(this, "Коммуникация", "Введите текст сообщения.");
+        return;
+    }
+
+    const QString recipientType = messageRecipientTypeComboBox->currentText();
+    QString recipientCode = "all";
+    QString recipientLabel = "Все сотрудники";
+
+    if (recipientType == "Конкретный сотрудник")
+    {
+        if (messageEmployeeComboBox->currentText().trimmed().isEmpty())
+        {
+            QMessageBox::warning(this, "Коммуникация", "Выберите сотрудника.");
+            return;
+        }
+        recipientCode = "employee";
+        recipientLabel = messageEmployeeComboBox->currentText();
+    }
+    else if (recipientType == "По должности")
+    {
+        if (messagePositionComboBox->currentText().trimmed().isEmpty())
+        {
+            QMessageBox::warning(this, "Коммуникация", "Выберите должность.");
+            return;
+        }
+        recipientCode = "position";
+        recipientLabel = messagePositionComboBox->currentText();
+    }
+
+    if (!DatabaseManager::instance().createNotification(
+            currentBusinessId,
+            shiftId,
+            recipientCode,
+            recipientLabel,
+            messageTypeComboBox->currentText(),
+            messageText,
+            "VK",
+            "Ожидает VK"))
+    {
+        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить уведомление.");
+        return;
+    }
+
+    messageTextEdit->clear();
+    loadUnnotifiedShiftOptions();
+    loadNotificationsHistory();
+}
+
+void BusinessMainWindow::onClearMessageClicked()
+{
+    if (messageTextEdit)
+        messageTextEdit->clear();
+}
+
+void BusinessMainWindow::onRefreshShiftResponsesClicked()
+{
+    loadShiftResponses();
+}
+
+void BusinessMainWindow::onSaveVkSettingsClicked()
+{
+    if (currentBusinessId < 0)
+        return;
+
+    VkSettingsData settings;
+    settings.groupId = vkGroupIdEdit ? vkGroupIdEdit->text() : QString();
+    settings.communityToken = vkCommunityTokenEdit ? vkCommunityTokenEdit->text() : QString();
+    settings.backendUrl = vkBackendUrlEdit ? vkBackendUrlEdit->text() : QString();
+    settings.isEnabled = vkEnabledCheckBox && vkEnabledCheckBox->isChecked();
+
+    if (!DatabaseManager::instance().saveVkSettings(currentBusinessId, settings))
+    {
+        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить настройки VK.");
+        return;
+    }
+
+    if (vkConnectionStatusLabel)
+        vkConnectionStatusLabel->setText("Статус: настройки сохранены, подключение ещё не проверено.");
+}
+
+void BusinessMainWindow::onCheckVkConnectionClicked()
+{
+    if (!vkConnectionStatusLabel)
+        return;
+
+    const bool hasGroupId = vkGroupIdEdit && !vkGroupIdEdit->text().trimmed().isEmpty();
+    const bool hasToken = vkCommunityTokenEdit && !vkCommunityTokenEdit->text().trimmed().isEmpty();
+    const bool hasBackendUrl = vkBackendUrlEdit && !vkBackendUrlEdit->text().trimmed().isEmpty();
+
+    if (hasGroupId && hasToken && hasBackendUrl)
+    {
+        vkConnectionStatusLabel->setText(
+            "Статус: данные заполнены. Реальная проверка подключения будет добавлена после подключения backend-сервера.");
+    }
+    else
+    {
+        vkConnectionStatusLabel->setText(
+            "Статус: заполните ID группы, токен сообщества и URL backend-сервера.");
     }
 }

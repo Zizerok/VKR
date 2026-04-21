@@ -55,6 +55,41 @@ struct ShiftPaymentInfo
     bool isPaid = false;
 };
 
+struct NotificationInfo
+{
+    int id = -1;
+    int shiftId = -1;
+    QString recipientType;
+    QString recipientLabel;
+    QString notificationType;
+    QString messageText;
+    QString channel;
+    QString sendStatus;
+    QString createdAt;
+};
+
+struct ShiftResponseInfo
+{
+    int id = -1;
+    int shiftId = -1;
+    int employeeId = -1;
+    QString vkId;
+    QString employeeName;
+    QString positionName;
+    QString responseStatus;
+    QString responseMessage;
+    QString createdAt;
+    QString processedAt;
+};
+
+struct VkSettingsData
+{
+    QString groupId;
+    QString communityToken;
+    QString backendUrl;
+    bool isEnabled = false;
+};
+
 class DatabaseManager
 {
 public:
@@ -133,6 +168,7 @@ public:
     bool deleteShift(int shiftId);
     QSqlQuery getShiftsForPeriod(int businessId, const QDate& startDate, const QDate& endDate);
     QSqlQuery getShiftsForList(int businessId, const QDate& fromDate);
+    QSqlQuery getShiftsWithoutNewShiftNotification(int businessId);
     QSqlQuery getAllShifts(int businessId);
     QStringList getShiftAssignedSummary(int shiftId);
     QStringList getShiftOpenPositionsSummary(int shiftId);
@@ -141,6 +177,18 @@ public:
     bool updateShiftAssignmentRevenue(int assignmentId, const QString& revenueAmount);
     bool markShiftAssignmentPaid(int assignmentId);
     bool markAllEmployeeAssignmentsPaid(int businessId, int employeeId);
+    bool createNotification(int businessId,
+                            int shiftId,
+                            const QString& recipientType,
+                            const QString& recipientLabel,
+                            const QString& notificationType,
+                            const QString& messageText,
+                            const QString& channel,
+                            const QString& sendStatus);
+    QList<NotificationInfo> getNotifications(int businessId);
+    QList<ShiftResponseInfo> getShiftResponses(int businessId);
+    bool saveVkSettings(int businessId, const VkSettingsData& settings);
+    VkSettingsData getVkSettings(int businessId);
 
 private:
     DatabaseManager();
