@@ -10,6 +10,7 @@
 #include "databasemanager.h"
 
 class QTableWidget;
+class QComboBox;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -48,6 +49,7 @@ private:
     QListWidget *paymentsEmployeeListWidget = nullptr;
     QListWidget *paymentsShiftListWidget = nullptr;
     QLabel *paymentsSummaryLabel = nullptr;
+    QComboBox *paymentsStatusFilterComboBox = nullptr;
     QLineEdit *paymentsRevenueEdit = nullptr;
     QPushButton *paymentsSaveRevenueButton = nullptr;
     QPushButton *paymentsMarkPaidButton = nullptr;
@@ -77,6 +79,7 @@ private:
     void loadPaymentsEmployees();
     void loadEmployeePaymentDetails(int employeeId);
     void updatePaymentRevenueEditor();
+    bool paymentMatchesCurrentFilter(const ShiftPaymentInfo& payment) const;
 
 private slots:
     void onPreviousShiftPeriodClicked();
@@ -94,6 +97,7 @@ private slots:
     void onDeletePositionClicked();
     void onPaymentEmployeeSelectionChanged();
     void onPaymentShiftSelectionChanged();
+    void onPaymentFilterChanged();
     void onSavePaymentRevenueClicked();
     void onMarkPaymentPaidClicked();
     void onMarkAllPaymentsPaidClicked();

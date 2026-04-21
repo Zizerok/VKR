@@ -7,6 +7,8 @@
 #include "positioneditdialog.h"
 
 #include <QColor>
+#include <QComboBox>
+#include <QDateTime>
 #include <QDoubleValidator>
 #include <QFrame>
 #include <QHeaderView>
@@ -34,6 +36,26 @@ double parsePaymentNumber(const QString& text)
     return ok ? value : 0.0;
 }
 
+QString formatPaymentDate(const QString& value)
+{
+    if (value.trimmed().isEmpty())
+        return "-";
+
+    QDateTime dateTime = QDateTime::fromString(value, Qt::ISODate);
+    if (!dateTime.isValid())
+        dateTime = QDateTime::fromString(value, "yyyy-MM-dd HH:mm:ss");
+
+    return dateTime.isValid()
+        ? dateTime.toString("dd.MM.yyyy HH:mm")
+        : value;
+}
+
+bool paymentNeedsRevenue(const ShiftPaymentInfo& payment)
+{
+    return payment.paymentType.contains("Процент", Qt::CaseInsensitive)
+        || !payment.percentRate.trimmed().isEmpty();
+}
+
 double calculatePaymentAmount(const ShiftPaymentInfo& payment)
 {
     if (payment.paymentType == "Почасовая")
@@ -51,7 +73,7 @@ double calculatePaymentAmount(const ShiftPaymentInfo& payment)
         return parsePaymentNumber(payment.fixedRate)
             + parsePaymentNumber(payment.revenueAmount) * parsePaymentNumber(payment.percentRate) / 100.0;
 
-    if (!payment.percentRate.trimmed().isEmpty())
+    if (paymentNeedsRevenue(payment))
     {
         const double percentPart = parsePaymentNumber(payment.revenueAmount)
             * parsePaymentNumber(payment.percentRate) / 100.0;
@@ -596,6 +618,14 @@ void BusinessMainWindow::setupPaymentsSection()
     paymentsSummaryLabel = new QLabel("Выберите сотрудника для просмотра выплат", this);
     paymentsSummaryLabel->setWordWrap(true);
 
+    auto *filterLayout = new QHBoxLayout();
+    auto *filterLabel = new QLabel("Фильтр:", this);
+    paymentsStatusFilterComboBox = new QComboBox(this);
+    paymentsStatusFilterComboBox->addItems({"Не оплачено", "Оплачено", "Все"});
+    filterLayout->addWidget(filterLabel);
+    filterLayout->addWidget(paymentsStatusFilterComboBox);
+    filterLayout->addStretch();
+
     auto *revenueLayout = new QHBoxLayout();
     auto *revenueLabel = new QLabel("Выручка:", this);
     paymentsRevenueEdit = new QLineEdit(this);
@@ -618,6 +648,7 @@ void BusinessMainWindow::setupPaymentsSection()
     buttonsLayout->addWidget(paymentsMarkAllPaidButton);
 
     rightLayout->addWidget(paymentsSummaryLabel);
+    rightLayout->addLayout(filterLayout);
     rightLayout->addLayout(revenueLayout);
     rightLayout->addWidget(paymentsShiftListWidget, 1);
     rightLayout->addLayout(buttonsLayout);
@@ -632,6 +663,8 @@ void BusinessMainWindow::setupPaymentsSection()
             this, &BusinessMainWindow::onPaymentEmployeeSelectionChanged);
     connect(paymentsShiftListWidget, &QListWidget::currentRowChanged,
             this, &BusinessMainWindow::onPaymentShiftSelectionChanged);
+    connect(paymentsStatusFilterComboBox, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &BusinessMainWindow::onPaymentFilterChanged);
     connect(paymentsSaveRevenueButton, &QPushButton::clicked,
             this, &BusinessMainWindow::onSavePaymentRevenueClicked);
     connect(paymentsMarkPaidButton, &QPushButton::clicked,
@@ -685,26 +718,37 @@ void BusinessMainWindow::loadEmployeePaymentDetails(int employeeId)
 
     double totalUnpaid = 0.0;
     int unpaidCount = 0;
-    for (const ShiftPaymentInfo& payment : currentPaymentItems)
+    int visibleCount = 0;
+    for (int i = 0; i < currentPaymentItems.size(); ++i)
     {
+        const ShiftPaymentInfo& payment = currentPaymentItems.at(i);
         const double amount = calculatePaymentAmount(payment);
-        QStringList lines;
-        lines << QString("%1 | %2 | %3").arg(payment.shiftDate, payment.timeRange, payment.positionName);
-        if (!payment.percentRate.trimmed().isEmpty())
-            lines << QString("Выручка: %1").arg(payment.revenueAmount.trimmed().isEmpty() ? "-" : payment.revenueAmount);
-        lines << QString("Тип оплаты: %1").arg(payment.paymentType);
-        lines << QString("Сумма: %1").arg(QString::number(amount, 'f', 2));
-        lines << QString("Статус: %1").arg(payment.isPaid ? "Оплачено" : "Не оплачено");
-
-        auto *item = new QListWidgetItem(lines.join("\n"));
-        item->setData(Qt::UserRole, payment.assignmentId);
-        paymentsShiftListWidget->addItem(item);
-
         if (!payment.isPaid)
         {
             totalUnpaid += amount;
             ++unpaidCount;
         }
+
+        if (!paymentMatchesCurrentFilter(payment))
+            continue;
+
+        QStringList lines;
+        lines << QString("%1 | %2 | %3").arg(payment.shiftDate, payment.timeRange, payment.positionName);
+        if (paymentNeedsRevenue(payment))
+            lines << QString("Выручка: %1").arg(payment.revenueAmount.trimmed().isEmpty() ? "-" : payment.revenueAmount);
+        lines << QString("Тип оплаты: %1").arg(payment.paymentType);
+        lines << QString("Сумма: %1").arg(QString::number(amount, 'f', 2));
+        lines << QString("Статус: %1").arg(payment.isPaid ? "Оплачено" : "Не оплачено");
+
+        if (payment.isPaid)
+            lines << QString("Дата оплаты: %1").arg(formatPaymentDate(payment.paidAt));
+
+        auto *item = new QListWidgetItem(lines.join("\n"));
+        item->setData(Qt::UserRole, payment.assignmentId);
+        item->setData(Qt::UserRole + 1, i);
+        paymentsShiftListWidget->addItem(item);
+        ++visibleCount;
+
     }
 
     const QString employeeName = paymentsEmployeeListWidget->currentItem()
@@ -714,7 +758,7 @@ void BusinessMainWindow::loadEmployeePaymentDetails(int employeeId)
         QString("%1\nК выплате: %2\nНеоплаченных смен: %3")
             .arg(employeeName)
             .arg(QString::number(totalUnpaid, 'f', 2))
-            .arg(unpaidCount));
+            .arg(QString("%1\nЗаписей в списке: %2").arg(unpaidCount).arg(visibleCount)));
 
     paymentsMarkPaidButton->setEnabled(paymentsShiftListWidget->count() > 0);
     paymentsMarkAllPaidButton->setEnabled(unpaidCount > 0);
@@ -950,12 +994,29 @@ void BusinessMainWindow::onPaymentEmployeeSelectionChanged()
     loadEmployeePaymentDetails(item ? item->data(Qt::UserRole).toInt() : -1);
 }
 
+bool BusinessMainWindow::paymentMatchesCurrentFilter(const ShiftPaymentInfo& payment) const
+{
+    if (!paymentsStatusFilterComboBox)
+        return true;
+
+    switch (paymentsStatusFilterComboBox->currentIndex())
+    {
+    case 0:
+        return !payment.isPaid;
+    case 1:
+        return payment.isPaid;
+    default:
+        return true;
+    }
+}
+
 void BusinessMainWindow::updatePaymentRevenueEditor()
 {
     if (!paymentsRevenueEdit || !paymentsSaveRevenueButton || !paymentsShiftListWidget)
         return;
 
-    const int row = paymentsShiftListWidget->currentRow();
+    QListWidgetItem *item = paymentsShiftListWidget->currentItem();
+    const int row = item ? item->data(Qt::UserRole + 1).toInt() : -1;
     const bool validRow = row >= 0 && row < currentPaymentItems.size();
 
     if (!validRow)
@@ -963,14 +1024,18 @@ void BusinessMainWindow::updatePaymentRevenueEditor()
         paymentsRevenueEdit->clear();
         paymentsRevenueEdit->setEnabled(false);
         paymentsSaveRevenueButton->setEnabled(false);
+        if (paymentsMarkPaidButton)
+            paymentsMarkPaidButton->setEnabled(false);
         return;
     }
 
     const ShiftPaymentInfo &payment = currentPaymentItems.at(row);
-    const bool needsRevenue = !payment.percentRate.trimmed().isEmpty();
+    const bool needsRevenue = paymentNeedsRevenue(payment);
     paymentsRevenueEdit->setText(payment.revenueAmount);
-    paymentsRevenueEdit->setEnabled(needsRevenue && !payment.isPaid);
-    paymentsSaveRevenueButton->setEnabled(needsRevenue && !payment.isPaid);
+    paymentsRevenueEdit->setEnabled(needsRevenue);
+    paymentsSaveRevenueButton->setEnabled(needsRevenue);
+    if (paymentsMarkPaidButton)
+        paymentsMarkPaidButton->setEnabled(!payment.isPaid);
 
     if (!needsRevenue)
         paymentsRevenueEdit->clear();
@@ -981,9 +1046,16 @@ void BusinessMainWindow::onPaymentShiftSelectionChanged()
     updatePaymentRevenueEditor();
 }
 
+void BusinessMainWindow::onPaymentFilterChanged()
+{
+    QListWidgetItem *item = paymentsEmployeeListWidget->currentItem();
+    loadEmployeePaymentDetails(item ? item->data(Qt::UserRole).toInt() : -1);
+}
+
 void BusinessMainWindow::onSavePaymentRevenueClicked()
 {
-    const int row = paymentsShiftListWidget ? paymentsShiftListWidget->currentRow() : -1;
+    QListWidgetItem *selectedPaymentItem = paymentsShiftListWidget ? paymentsShiftListWidget->currentItem() : nullptr;
+    const int row = selectedPaymentItem ? selectedPaymentItem->data(Qt::UserRole + 1).toInt() : -1;
     if (row < 0 || row >= currentPaymentItems.size())
     {
         QMessageBox::information(this, "Выплаты", "Сначала выберите смену.");
@@ -991,7 +1063,7 @@ void BusinessMainWindow::onSavePaymentRevenueClicked()
     }
 
     const ShiftPaymentInfo &payment = currentPaymentItems.at(row);
-    if (payment.percentRate.trimmed().isEmpty())
+    if (!paymentNeedsRevenue(payment))
     {
         QMessageBox::information(this, "Выплаты", "Для этой схемы оплаты выручка не требуется.");
         return;
@@ -1032,11 +1104,11 @@ void BusinessMainWindow::onMarkPaymentPaidClicked()
         return;
     }
 
-    const int row = paymentsShiftListWidget->currentRow();
+    const int row = item->data(Qt::UserRole + 1).toInt();
     if (row >= 0 && row < currentPaymentItems.size())
     {
         const ShiftPaymentInfo &payment = currentPaymentItems.at(row);
-        if (!payment.percentRate.trimmed().isEmpty() && payment.revenueAmount.trimmed().isEmpty())
+        if (paymentNeedsRevenue(payment) && payment.revenueAmount.trimmed().isEmpty())
         {
             QMessageBox::information(this, "Выплаты", "Сначала укажите выручку для этой смены.");
             return;
@@ -1081,7 +1153,7 @@ void BusinessMainWindow::onMarkAllPaymentsPaidClicked()
     const int employeeId = item->data(Qt::UserRole).toInt();
     for (const ShiftPaymentInfo &payment : std::as_const(currentPaymentItems))
     {
-        if (!payment.isPaid && !payment.percentRate.trimmed().isEmpty() && payment.revenueAmount.trimmed().isEmpty())
+        if (!payment.isPaid && paymentNeedsRevenue(payment) && payment.revenueAmount.trimmed().isEmpty())
         {
             QMessageBox::information(this, "Выплаты", "Укажите выручку для всех процентных смен перед массовой оплатой.");
             return;

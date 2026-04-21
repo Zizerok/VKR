@@ -1056,7 +1056,7 @@ QList<EmployeePaymentSummary> DatabaseManager::getEmployeePaymentSummaries(int b
     QSqlQuery query(db);
     query.prepare(
         "SELECT sa.id, sa.employee_id, e.full_name, s.shift_date, s.start_time, s.end_time, "
-        "sa.payment_type, sa.hourly_rate, sa.fixed_rate, sa.percent_rate, sa.revenue_amount, sa.is_paid "
+        "sa.payment_type, sa.hourly_rate, sa.fixed_rate, sa.percent_rate, sa.revenue_amount, sa.is_paid, sa.paid_at "
         "FROM shift_assignments sa "
         "JOIN shifts s ON s.id = sa.shift_id "
         "JOIN employees e ON e.id = sa.employee_id "
@@ -1081,6 +1081,7 @@ QList<EmployeePaymentSummary> DatabaseManager::getEmployeePaymentSummaries(int b
         payment.fixedRate = query.value("fixed_rate").toString();
         payment.percentRate = query.value("percent_rate").toString();
         payment.revenueAmount = query.value("revenue_amount").toString();
+        payment.paidAt = query.value("paid_at").toString();
         payment.isPaid = query.value("is_paid").toInt() == 1;
 
         EmployeePaymentSummary summary = summaries.value(payment.employeeId);
@@ -1110,7 +1111,7 @@ QList<ShiftPaymentInfo> DatabaseManager::getEmployeeShiftPayments(int businessId
     QSqlQuery query(db);
     query.prepare(
         "SELECT sa.id, sa.shift_id, s.shift_date, s.start_time, s.end_time, sa.position_name, "
-        "sa.payment_type, sa.hourly_rate, sa.fixed_rate, sa.percent_rate, sa.revenue_amount, sa.is_paid "
+        "sa.payment_type, sa.hourly_rate, sa.fixed_rate, sa.percent_rate, sa.revenue_amount, sa.is_paid, sa.paid_at "
         "FROM shift_assignments sa "
         "JOIN shifts s ON s.id = sa.shift_id "
         "WHERE s.business_id = ? AND sa.employee_id = ? "
@@ -1135,6 +1136,7 @@ QList<ShiftPaymentInfo> DatabaseManager::getEmployeeShiftPayments(int businessId
         payment.fixedRate = query.value("fixed_rate").toString();
         payment.percentRate = query.value("percent_rate").toString();
         payment.revenueAmount = query.value("revenue_amount").toString();
+        payment.paidAt = query.value("paid_at").toString();
         payment.isPaid = query.value("is_paid").toInt() == 1;
         result.append(payment);
     }

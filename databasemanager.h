@@ -51,6 +51,7 @@ struct ShiftPaymentInfo
     QString fixedRate;
     QString percentRate;
     QString revenueAmount;
+    QString paidAt;
     bool isPaid = false;
 };
 
