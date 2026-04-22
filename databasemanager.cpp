@@ -1,6 +1,7 @@
 #include "databasemanager.h"
 
 #include <QDebug>
+#include <QDir>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -11,13 +12,18 @@ namespace
 void ensureColumn(QSqlDatabase& db, const QString& tableName, const QString& columnName, const QString& definition)
 {
     QSqlQuery infoQuery(db);
-    infoQuery.exec(QString("PRAGMA table_info(%1)").arg(tableName));
+    infoQuery.prepare(
+        "SELECT column_name "
+        "FROM information_schema.columns "
+        "WHERE table_schema = 'public' "
+        "AND table_name = :table_name "
+        "AND column_name = :column_name"
+        );
+    infoQuery.bindValue(":table_name", tableName);
+    infoQuery.bindValue(":column_name", columnName);
 
-    while (infoQuery.next())
-    {
-        if (infoQuery.value("name").toString() == columnName)
-            return;
-    }
+    if (infoQuery.exec() && infoQuery.next())
+        return;
 
     QSqlQuery alterQuery(db);
     alterQuery.exec(QString("ALTER TABLE %1 ADD COLUMN %2 %3").arg(tableName, columnName, definition));
@@ -71,17 +77,33 @@ DatabaseManager& DatabaseManager::instance()
 
 bool DatabaseManager::connect()
 {
-    db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("database.db");
+    const QString postgresBinPath = "C:/Program Files/PostgreSQL/18/bin";
+    if (QDir(postgresBinPath).exists())
+    {
+        const QByteArray currentPath = qgetenv("PATH");
+        const QByteArray postgresPath = QDir::toNativeSeparators(postgresBinPath).toLocal8Bit();
+
+        if (!currentPath.contains(postgresPath))
+            qputenv("PATH", postgresPath + ";" + currentPath);
+    }
+
+    qDebug() << "Available SQL drivers:" << QSqlDatabase::drivers();
+
+    db = QSqlDatabase::addDatabase("QPSQL");
+    db.setHostName("127.0.0.1");
+    db.setPort(5432);
+    db.setDatabaseName("vkr_db");
+    db.setUserName("postgres");
+    db.setPassword("123123");
 
     if (db.open())
     {
-        qDebug() << "Database connected";
+        qDebug() << "PostgreSQL database connected";
         createTables();
         return true;
     }
 
-    qDebug() << "Database error";
+    qDebug() << "PostgreSQL database error:" << db.lastError().text();
     return false;
 }
 
@@ -91,27 +113,27 @@ void DatabaseManager::createTables()
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS users ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "login TEXT UNIQUE,"
         "email TEXT,"
         "password_hash TEXT,"
         "salt TEXT,"
-        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         ")"
         );
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS businesses ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "owner_id INTEGER,"
         "name TEXT,"
-        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         ")"
         );
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS employees ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "business_id INTEGER NOT NULL,"
         "full_name TEXT NOT NULL,"
         "last_name TEXT,"
@@ -127,24 +149,24 @@ void DatabaseManager::createTables()
         "comment TEXT,"
         "salary_rate TEXT,"
         "photo_path TEXT,"
-        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         ")"
         );
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS positions ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "business_id INTEGER NOT NULL,"
         "name TEXT NOT NULL,"
         "salary REAL,"
         "base_position_id INTEGER,"
-        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         ")"
         );
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS position_capabilities ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "position_id INTEGER NOT NULL,"
         "covered_position_id INTEGER NOT NULL"
         ")"
@@ -152,20 +174,20 @@ void DatabaseManager::createTables()
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS shifts ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "business_id INTEGER NOT NULL,"
         "shift_date TEXT NOT NULL,"
         "start_time TEXT NOT NULL,"
         "end_time TEXT NOT NULL,"
         "status TEXT NOT NULL,"
         "comment TEXT,"
-        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         ")"
         );
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS shift_assignments ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "shift_id INTEGER NOT NULL,"
         "employee_id INTEGER NOT NULL,"
         "position_name TEXT NOT NULL,"
@@ -179,7 +201,7 @@ void DatabaseManager::createTables()
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS shift_open_positions ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "shift_id INTEGER NOT NULL,"
         "position_name TEXT NOT NULL,"
         "employee_count INTEGER NOT NULL,"
@@ -192,7 +214,7 @@ void DatabaseManager::createTables()
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS notifications ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "business_id INTEGER NOT NULL,"
         "shift_id INTEGER,"
         "recipient_type TEXT,"
@@ -201,13 +223,13 @@ void DatabaseManager::createTables()
         "message_text TEXT,"
         "channel TEXT DEFAULT 'VK',"
         "send_status TEXT,"
-        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         ")"
         );
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS shift_responses ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "business_id INTEGER NOT NULL,"
         "shift_id INTEGER,"
         "vk_id TEXT,"
@@ -215,14 +237,14 @@ void DatabaseManager::createTables()
         "position_name TEXT,"
         "response_status TEXT,"
         "response_message TEXT,"
-        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
         "processed_at TEXT"
         ")"
         );
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS vk_settings ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "id SERIAL PRIMARY KEY,"
         "business_id INTEGER UNIQUE NOT NULL,"
         "group_id TEXT,"
         "community_token TEXT,"
@@ -549,7 +571,8 @@ bool DatabaseManager::createPosition(int businessId,
     QSqlQuery query(db);
     query.prepare(
         "INSERT INTO positions (business_id, name, salary) "
-        "VALUES (:business_id, :name, :salary)"
+        "VALUES (:business_id, :name, :salary) "
+        "RETURNING id"
         );
     query.bindValue(":business_id", businessId);
     query.bindValue(":name", name.trimmed());
@@ -560,13 +583,13 @@ bool DatabaseManager::createPosition(int businessId,
     else
         query.bindValue(":salary", trimmedSalary.toDouble());
 
-    if (!query.exec())
+    if (!query.exec() || !query.next())
     {
         qDebug() << "CREATE POSITION ERROR:" << query.lastError().text();
         return false;
     }
 
-    const int positionId = query.lastInsertId().toInt();
+    const int positionId = query.value("id").toInt();
     return updatePosition(positionId, name, salaryText, coveredPositionIds);
 }
 
@@ -677,7 +700,8 @@ bool DatabaseManager::createShift(int businessId,
     QSqlQuery shiftQuery(db);
     shiftQuery.prepare(
         "INSERT INTO shifts (business_id, shift_date, start_time, end_time, status, comment) "
-        "VALUES (:business_id, :shift_date, :start_time, :end_time, :status, :comment)"
+        "VALUES (:business_id, :shift_date, :start_time, :end_time, :status, :comment) "
+        "RETURNING id"
         );
     shiftQuery.bindValue(":business_id", businessId);
     shiftQuery.bindValue(":shift_date", shiftDate.toString(Qt::ISODate));
@@ -686,14 +710,14 @@ bool DatabaseManager::createShift(int businessId,
     shiftQuery.bindValue(":status", status.trimmed());
     shiftQuery.bindValue(":comment", comment.trimmed());
 
-    if (!shiftQuery.exec())
+    if (!shiftQuery.exec() || !shiftQuery.next())
     {
         qDebug() << "CREATE SHIFT ERROR:" << shiftQuery.lastError().text();
         db.rollback();
         return false;
     }
 
-    const int shiftId = shiftQuery.lastInsertId().toInt();
+    const int shiftId = shiftQuery.value("id").toInt();
 
     for (const ShiftAssignedEmployeeData& assignment : assignedEmployees)
     {
