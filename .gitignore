@@ -11,6 +11,7 @@ build/
 *.db-wal
 *.db-shm
 .env
+database.ini
 backend/.env
 backend/*.db
 backend/__pycache__/

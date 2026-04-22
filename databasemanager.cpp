@@ -1,7 +1,10 @@
 #include "databasemanager.h"
 
+#include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QFile>
+#include <QSettings>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -9,6 +12,70 @@
 
 namespace
 {
+struct DatabaseConfig
+{
+    QString host = "127.0.0.1";
+    int port = 5432;
+    QString databaseName = "vkr_db";
+    QString userName = "postgres";
+    QString password;
+    QString postgresBinPath = "C:/Program Files/PostgreSQL/18/bin";
+};
+
+QString findDatabaseConfigPath()
+{
+    const QString fileName = "database.ini";
+    const QStringList startPaths = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath(),
+        "C:/Users/Dmitrii/Documents/VKR_2"
+    };
+
+    for (const QString& startPath : startPaths)
+    {
+        QDir dir(startPath);
+        for (int i = 0; i < 6; ++i)
+        {
+            const QString candidate = dir.filePath(fileName);
+            if (QFile::exists(candidate))
+                return candidate;
+
+            if (!dir.cdUp())
+                break;
+        }
+    }
+
+    return {};
+}
+
+DatabaseConfig loadDatabaseConfig()
+{
+    DatabaseConfig config;
+    const QString configPath = findDatabaseConfigPath();
+
+    if (configPath.isEmpty())
+    {
+        qDebug() << "database.ini not found. Using default PostgreSQL connection values without password.";
+        return config;
+    }
+
+    QSettings settings(configPath, QSettings::IniFormat);
+    settings.beginGroup("database");
+    config.host = settings.value("host", config.host).toString();
+    config.port = settings.value("port", config.port).toInt();
+    config.databaseName = settings.value("name", config.databaseName).toString();
+    config.userName = settings.value("user", config.userName).toString();
+    config.password = settings.value("password", config.password).toString();
+    settings.endGroup();
+
+    settings.beginGroup("postgres");
+    config.postgresBinPath = settings.value("bin_path", config.postgresBinPath).toString();
+    settings.endGroup();
+
+    qDebug() << "Database config loaded from:" << configPath;
+    return config;
+}
+
 void ensureColumn(QSqlDatabase& db, const QString& tableName, const QString& columnName, const QString& definition)
 {
     QSqlQuery infoQuery(db);
@@ -77,11 +144,12 @@ DatabaseManager& DatabaseManager::instance()
 
 bool DatabaseManager::connect()
 {
-    const QString postgresBinPath = "C:/Program Files/PostgreSQL/18/bin";
-    if (QDir(postgresBinPath).exists())
+    const DatabaseConfig config = loadDatabaseConfig();
+
+    if (QDir(config.postgresBinPath).exists())
     {
         const QByteArray currentPath = qgetenv("PATH");
-        const QByteArray postgresPath = QDir::toNativeSeparators(postgresBinPath).toLocal8Bit();
+        const QByteArray postgresPath = QDir::toNativeSeparators(config.postgresBinPath).toLocal8Bit();
 
         if (!currentPath.contains(postgresPath))
             qputenv("PATH", postgresPath + ";" + currentPath);
@@ -90,11 +158,11 @@ bool DatabaseManager::connect()
     qDebug() << "Available SQL drivers:" << QSqlDatabase::drivers();
 
     db = QSqlDatabase::addDatabase("QPSQL");
-    db.setHostName("127.0.0.1");
-    db.setPort(5432);
-    db.setDatabaseName("vkr_db");
-    db.setUserName("postgres");
-    db.setPassword("123123");
+    db.setHostName(config.host);
+    db.setPort(config.port);
+    db.setDatabaseName(config.databaseName);
+    db.setUserName(config.userName);
+    db.setPassword(config.password);
 
     if (db.open())
     {

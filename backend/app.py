@@ -1,10 +1,16 @@
 import json
 import os
 import random
-import sqlite3
 from pathlib import Path
 from typing import Any
 
+if hasattr(os, "add_dll_directory"):
+    postgres_bin_path = os.getenv("POSTGRES_BIN_PATH", "C:/Program Files/PostgreSQL/18/bin")
+    if Path(postgres_bin_path).exists():
+        os.add_dll_directory(postgres_bin_path)
+
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -19,7 +25,12 @@ VK_COMMUNITY_TOKEN = os.getenv("VK_COMMUNITY_TOKEN", "")
 VK_CONFIRMATION_CODE = os.getenv("VK_CONFIRMATION_CODE", "")
 VK_SECRET_KEY = os.getenv("VK_SECRET_KEY", "")
 VK_API_VERSION = os.getenv("VK_API_VERSION", "5.199")
-DB_PATH = BASE_DIR / os.getenv("BACKEND_DB_PATH", "backend.db")
+
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_NAME = os.getenv("DB_NAME", "vkr_db")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 app = FastAPI(title="VKR VK Bot Backend")
 
@@ -36,42 +47,50 @@ class ShiftNotificationRequest(BaseModel):
     open_positions: list[ShiftPosition] = []
 
 
-def db_connection() -> sqlite3.Connection:
-    connection = sqlite3.connect(DB_PATH)
-    connection.row_factory = sqlite3.Row
-    return connection
+def db_connection():
+    return psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        cursor_factory=RealDictCursor,
+    )
 
 
 def init_db() -> None:
     with db_connection() as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS shift_responses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                shift_id INTEGER NOT NULL,
-                vk_id TEXT NOT NULL,
-                position_name TEXT,
-                response_status TEXT NOT NULL,
-                response_message TEXT,
-                raw_payload TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                processed_at TEXT
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS shift_responses (
+                    id SERIAL PRIMARY KEY,
+                    business_id INTEGER NOT NULL,
+                    shift_id INTEGER,
+                    vk_id TEXT,
+                    employee_id INTEGER,
+                    position_name TEXT,
+                    response_status TEXT,
+                    response_message TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    processed_at TEXT
+                )
+                """
             )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sent_notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                shift_id INTEGER,
-                user_id INTEGER,
-                message_text TEXT,
-                send_status TEXT NOT NULL,
-                error_text TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            cursor.execute("ALTER TABLE shift_responses ADD COLUMN IF NOT EXISTS raw_payload TEXT")
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sent_notifications (
+                    id SERIAL PRIMARY KEY,
+                    shift_id INTEGER,
+                    user_id INTEGER,
+                    message_text TEXT,
+                    send_status TEXT NOT NULL,
+                    error_text TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
             )
-            """
-        )
 
 
 @app.on_event("startup")
@@ -131,28 +150,71 @@ def build_shift_keyboard(shift_id: int, open_positions: list[ShiftPosition]) -> 
     )
 
 
+def get_business_id_by_shift(connection, shift_id: int | None) -> int | None:
+    if not shift_id:
+        return None
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT business_id FROM shifts WHERE id = %s", (shift_id,))
+        row = cursor.fetchone()
+
+    return row["business_id"] if row else None
+
+
+def get_employee_id_by_vk_id(connection, business_id: int, vk_id: int) -> int | None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id
+            FROM employees
+            WHERE business_id = %s AND vk_id = %s
+            LIMIT 1
+            """,
+            (business_id, str(vk_id)),
+        )
+        row = cursor.fetchone()
+
+    return row["id"] if row else None
+
+
 def save_shift_response(vk_id: int, payload: dict[str, Any], raw_payload: dict[str, Any]) -> None:
     with db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO shift_responses (
-                shift_id, vk_id, position_name, response_status, response_message, raw_payload
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                payload.get("shift_id"),
-                str(vk_id),
-                payload.get("position", ""),
-                "new",
-                "Отклик получен от VK-бота",
-                json.dumps(raw_payload, ensure_ascii=False),
-            ),
-        )
+        shift_id = payload.get("shift_id")
+        business_id = get_business_id_by_shift(connection, shift_id)
+        if business_id is None:
+            raise HTTPException(status_code=404, detail=f"Shift {shift_id} was not found")
+
+        employee_id = get_employee_id_by_vk_id(connection, business_id, vk_id)
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO shift_responses (
+                    business_id, shift_id, vk_id, employee_id, position_name,
+                    response_status, response_message, raw_payload
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    business_id,
+                    shift_id,
+                    str(vk_id),
+                    employee_id,
+                    payload.get("position", ""),
+                    "new",
+                    "Отклик получен от VK-бота",
+                    json.dumps(raw_payload, ensure_ascii=False),
+                ),
+            )
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    with db_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1 AS ok")
+            cursor.fetchone()
+
+    return {"status": "ok", "database": "ok"}
 
 
 @app.post("/vk/callback")
@@ -222,14 +284,15 @@ def send_shift_notification(payload: ShiftNotificationRequest) -> dict[str, Any]
             error_text = str(exc.detail)
 
         with db_connection() as connection:
-            connection.execute(
-                """
-                INSERT INTO sent_notifications (
-                    shift_id, user_id, message_text, send_status, error_text
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (payload.shift_id, user_id, payload.message, status, error_text),
-            )
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO sent_notifications (
+                        shift_id, user_id, message_text, send_status, error_text
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (payload.shift_id, user_id, payload.message, status, error_text),
+                )
 
         results.append({"user_id": user_id, "status": status, "error": error_text})
 
@@ -239,13 +302,15 @@ def send_shift_notification(payload: ShiftNotificationRequest) -> dict[str, Any]
 @app.get("/api/shift-responses")
 def get_shift_responses() -> dict[str, list[dict[str, Any]]]:
     with db_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT id, shift_id, vk_id, position_name, response_status,
-                   response_message, created_at, processed_at
-            FROM shift_responses
-            ORDER BY created_at DESC, id DESC
-            """
-        ).fetchall()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, business_id, shift_id, vk_id, employee_id, position_name,
+                       response_status, response_message, created_at, processed_at
+                FROM shift_responses
+                ORDER BY created_at DESC, id DESC
+                """
+            )
+            rows = cursor.fetchall()
 
-    return {"responses": [dict(row) for row in rows]}
+    return {"responses": rows}
