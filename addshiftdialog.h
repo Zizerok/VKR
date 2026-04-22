@@ -22,10 +22,13 @@ class AddShiftDialog : public QDialog
 
 public:
     explicit AddShiftDialog(int businessId, int shiftId = -1, QWidget *parent = nullptr);
+    bool hasOpenPositions() const;
+    int savedShiftId() const;
 
 private:
     int currentBusinessId;
     int currentShiftId = -1;
+    int lastSavedShiftId = -1;
     QList<ShiftAssignedEmployeeData> assignedEmployees;
     QList<ShiftOpenPositionData> openPositions;
 

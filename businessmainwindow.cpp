@@ -1171,11 +1171,40 @@ void BusinessMainWindow::onCreateShiftClicked()
     AddShiftDialog dialog(currentBusinessId, -1, this);
     if (dialog.exec() == QDialog::Accepted)
     {
+        const int createdShiftId = dialog.savedShiftId();
+        const bool shouldOfferNotification = dialog.hasOpenPositions() && createdShiftId > 0;
+
         loadShiftMonthCalendar();
         loadShiftDayView();
         loadShiftList();
         loadPaymentsEmployees();
         loadUnnotifiedShiftOptions();
+
+        if (shouldOfferNotification
+            && QMessageBox::question(
+                this,
+                "Уведомление о смене",
+                "В смене есть свободные позиции. Создать уведомление для сотрудников через VK?") == QMessageBox::Yes)
+        {
+            const QString messageText = buildShiftNotificationText(createdShiftId);
+            if (DatabaseManager::instance().createNotification(
+                    currentBusinessId,
+                    createdShiftId,
+                    "all",
+                    "Все сотрудники",
+                    "Новая смена",
+                    messageText,
+                    "VK",
+                    "Ожидает VK"))
+            {
+                loadUnnotifiedShiftOptions();
+                loadNotificationsHistory();
+            }
+            else
+            {
+                QMessageBox::critical(this, "Ошибка", "Не удалось создать уведомление о смене.");
+            }
+        }
     }
 }
 

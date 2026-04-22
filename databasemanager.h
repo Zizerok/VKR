@@ -154,6 +154,7 @@ public:
                      const QString& comment,
                      const QList<ShiftAssignedEmployeeData>& assignedEmployees,
                      const QList<ShiftOpenPositionData>& openPositions);
+    int getLastShiftIdForBusiness(int businessId);
     QSqlQuery getShiftById(int shiftId);
     QList<ShiftAssignedEmployeeData> getShiftAssignments(int shiftId);
     QList<ShiftOpenPositionData> getShiftOpenPositions(int shiftId);

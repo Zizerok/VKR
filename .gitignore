@@ -10,6 +10,10 @@ build/
 *.log
 *.db-wal
 *.db-shm
+.env
+backend/.env
+backend/*.db
+backend/__pycache__/
 
 # Qt Creator
 *.autosave

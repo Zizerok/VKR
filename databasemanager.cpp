@@ -757,6 +757,23 @@ bool DatabaseManager::createShift(int businessId,
     return true;
 }
 
+int DatabaseManager::getLastShiftIdForBusiness(int businessId)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT id FROM shifts "
+        "WHERE business_id = ? "
+        "ORDER BY id DESC "
+        "LIMIT 1"
+        );
+    query.addBindValue(businessId);
+
+    if (query.exec() && query.next())
+        return query.value("id").toInt();
+
+    return -1;
+}
+
 QSqlQuery DatabaseManager::getShiftById(int shiftId)
 {
     QSqlQuery query(db);

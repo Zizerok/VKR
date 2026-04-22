@@ -54,6 +54,16 @@ AddShiftDialog::AddShiftDialog(int businessId, int shiftId, QWidget *parent)
         loadShift();
 }
 
+bool AddShiftDialog::hasOpenPositions() const
+{
+    return !openPositions.isEmpty();
+}
+
+int AddShiftDialog::savedShiftId() const
+{
+    return lastSavedShiftId;
+}
+
 void AddShiftDialog::buildUi()
 {
     const bool editMode = currentShiftId > 0;
@@ -498,6 +508,10 @@ void AddShiftDialog::saveShift()
                 : "Не удалось сохранить смену в базу данных.");
         return;
     }
+
+    lastSavedShiftId = currentShiftId > 0
+        ? currentShiftId
+        : DatabaseManager::instance().getLastShiftIdForBusiness(currentBusinessId);
 
     accept();
 }
