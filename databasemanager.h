@@ -186,6 +186,11 @@ public:
                             const QString& messageText,
                             const QString& channel,
                             const QString& sendStatus);
+    bool updateLatestNotificationStatus(int businessId, int shiftId, const QString& sendStatus);
+    QList<int> getVkRecipientIds(int businessId,
+                                 const QString& recipientCode,
+                                 int employeeId,
+                                 const QString& positionName);
     QList<NotificationInfo> getNotifications(int businessId);
     QList<ShiftResponseInfo> getShiftResponses(int businessId);
     bool saveVkSettings(int businessId, const VkSettingsData& settings);

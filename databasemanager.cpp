@@ -1386,6 +1386,122 @@ bool DatabaseManager::createNotification(int businessId,
     return ok;
 }
 
+bool DatabaseManager::updateLatestNotificationStatus(int businessId, int shiftId, const QString& sendStatus)
+{
+    QSqlQuery query(db);
+    if (shiftId > 0)
+    {
+        query.prepare(
+            "UPDATE notifications "
+            "SET send_status = :send_status "
+            "WHERE id = ("
+            "SELECT id "
+            "FROM notifications "
+            "WHERE business_id = :business_id "
+            "AND shift_id = :shift_id "
+            "ORDER BY id DESC "
+            "LIMIT 1"
+            ")"
+            );
+        query.bindValue(":shift_id", shiftId);
+    }
+    else
+    {
+        query.prepare(
+            "UPDATE notifications "
+            "SET send_status = :send_status "
+            "WHERE id = ("
+            "SELECT id "
+            "FROM notifications "
+            "WHERE business_id = :business_id "
+            "ORDER BY id DESC "
+            "LIMIT 1"
+            ")"
+            );
+    }
+
+    query.bindValue(":send_status", sendStatus.trimmed());
+    query.bindValue(":business_id", businessId);
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "UPDATE NOTIFICATION STATUS ERROR:" << query.lastError().text();
+    return ok;
+}
+
+QList<int> DatabaseManager::getVkRecipientIds(int businessId,
+                                              const QString& recipientCode,
+                                              int employeeId,
+                                              const QString& positionName)
+{
+    QList<int> result;
+    QSqlQuery query(db);
+
+    if (recipientCode == "employee")
+    {
+        query.prepare(
+            "SELECT vk_id "
+            "FROM employees "
+            "WHERE business_id = :business_id "
+            "AND id = :employee_id "
+            "AND is_active = 1 "
+            "AND vk_id IS NOT NULL "
+            "AND TRIM(vk_id) <> ''"
+            );
+        query.bindValue(":business_id", businessId);
+        query.bindValue(":employee_id", employeeId);
+    }
+    else if (recipientCode == "position")
+    {
+        query.prepare(
+            "SELECT DISTINCT e.vk_id "
+            "FROM employees e "
+            "LEFT JOIN positions employee_position "
+            "ON employee_position.business_id = e.business_id "
+            "AND employee_position.name = e.position "
+            "LEFT JOIN position_capabilities pc "
+            "ON pc.position_id = employee_position.id "
+            "LEFT JOIN positions covered_position "
+            "ON covered_position.id = pc.covered_position_id "
+            "WHERE e.business_id = :business_id "
+            "AND e.is_active = 1 "
+            "AND e.vk_id IS NOT NULL "
+            "AND TRIM(e.vk_id) <> '' "
+            "AND (e.position = :position_name OR covered_position.name = :position_name)"
+            );
+        query.bindValue(":business_id", businessId);
+        query.bindValue(":position_name", positionName.trimmed());
+    }
+    else
+    {
+        query.prepare(
+            "SELECT vk_id "
+            "FROM employees "
+            "WHERE business_id = :business_id "
+            "AND is_active = 1 "
+            "AND vk_id IS NOT NULL "
+            "AND TRIM(vk_id) <> ''"
+            );
+        query.bindValue(":business_id", businessId);
+    }
+
+    if (!query.exec())
+    {
+        qDebug() << "GET VK RECIPIENT IDS ERROR:" << query.lastError().text();
+        return result;
+    }
+
+    while (query.next())
+    {
+        bool ok = false;
+        const int vkId = query.value("vk_id").toString().trimmed().toInt(&ok);
+        if (ok && vkId > 0 && !result.contains(vkId))
+            result.append(vkId);
+    }
+
+    return result;
+}
+
 QList<NotificationInfo> DatabaseManager::getNotifications(int businessId)
 {
     QList<NotificationInfo> result;

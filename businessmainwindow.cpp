@@ -15,12 +15,20 @@
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QEventLoop>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QMap>
 #include <QMessageBox>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QPushButton>
 #include <QSet>
 #include <QTableWidget>
@@ -28,6 +36,8 @@
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QTime>
+#include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <algorithm>
 
@@ -839,7 +849,8 @@ void BusinessMainWindow::updateMessageTypeControls()
     messageShiftComboBox->setEnabled(isNewShiftMessage);
     messageShiftComboBox->setVisible(isNewShiftMessage);
 
-    if (isNewShiftMessage)
+    const bool shouldSendViaBackend = true;
+    if (shouldSendViaBackend)
     {
         loadUnnotifiedShiftOptions();
         messageRecipientTypeComboBox->setCurrentIndex(0);
@@ -1596,6 +1607,8 @@ void BusinessMainWindow::onSendMessageClicked()
 
     const QString recipientType = messageRecipientTypeComboBox->currentText();
     QString recipientCode = "all";
+    int recipientEmployeeId = -1;
+    QString recipientPositionName;
     QString recipientLabel = "Все сотрудники";
 
     if (recipientType == "Конкретный сотрудник")
@@ -1607,6 +1620,7 @@ void BusinessMainWindow::onSendMessageClicked()
         }
         recipientCode = "employee";
         recipientLabel = messageEmployeeComboBox->currentText();
+        recipientEmployeeId = messageEmployeeComboBox->currentData().toInt();
     }
     else if (recipientType == "По должности")
     {
@@ -1617,6 +1631,121 @@ void BusinessMainWindow::onSendMessageClicked()
         }
         recipientCode = "position";
         recipientLabel = messagePositionComboBox->currentText();
+        recipientPositionName = recipientLabel;
+    }
+
+    QString sendStatus = "РћР¶РёРґР°РµС‚ VK";
+    if (true)
+    {
+        const QList<int> vkIds = DatabaseManager::instance().getVkRecipientIds(
+            currentBusinessId,
+            recipientCode,
+            recipientEmployeeId,
+            recipientPositionName
+            );
+
+        if (vkIds.isEmpty())
+        {
+            QMessageBox::warning(this, "РљРѕРјРјСѓРЅРёРєР°С†РёСЏ", "РќРµС‚ РїРѕРґС…РѕРґСЏС‰РёС… СЃРѕС‚СЂСѓРґРЅРёРєРѕРІ СЃ VK ID.");
+            return;
+        }
+
+        QJsonArray userIds;
+        for (int vkId : vkIds)
+            userIds.append(vkId);
+
+        QJsonArray openPositionsJson;
+        const QList<ShiftOpenPositionData> openPositions = isNewShiftMessage
+            ? DatabaseManager::instance().getShiftOpenPositions(shiftId)
+            : QList<ShiftOpenPositionData>();
+        for (const ShiftOpenPositionData& openPosition : openPositions)
+        {
+            QJsonObject item;
+            item["position"] = openPosition.positionName;
+            item["count"] = openPosition.employeeCount;
+            openPositionsJson.append(item);
+        }
+
+        QJsonObject payload;
+        if (isNewShiftMessage)
+            payload["shift_id"] = shiftId;
+        else
+            payload["shift_id"] = QJsonValue::Null;
+        payload["message"] = messageText;
+        payload["user_ids"] = userIds;
+        payload["open_positions"] = openPositionsJson;
+
+        VkSettingsData settings = DatabaseManager::instance().getVkSettings(currentBusinessId);
+        QString backendUrl = settings.backendUrl.trimmed();
+        if (backendUrl.isEmpty())
+            backendUrl = "http://127.0.0.1:8000";
+        while (backendUrl.endsWith('/'))
+            backendUrl.chop(1);
+
+        QNetworkAccessManager manager;
+        QNetworkRequest request{QUrl(backendUrl + "/api/send-shift-notification")};
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+
+        QNetworkReply *reply = manager.post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+        connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+
+        timer.start(15000);
+        loop.exec();
+
+        if (timer.isActive())
+        {
+            timer.stop();
+            const QByteArray responseBody = reply->readAll();
+            const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+            if (reply->error() != QNetworkReply::NoError || httpStatus < 200 || httpStatus >= 300)
+            {
+                sendStatus = "РћС€РёР±РєР° VK";
+                QMessageBox::warning(
+                    this,
+                    "VK backend",
+                    QString("Backend РЅРµ СЃРјРѕРі РѕС‚РїСЂР°РІРёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёРµ.\n%1")
+                        .arg(QString::fromUtf8(responseBody).isEmpty()
+                                 ? reply->errorString()
+                                 : QString::fromUtf8(responseBody))
+                    );
+            }
+            else
+            {
+                const QJsonDocument responseJson = QJsonDocument::fromJson(responseBody);
+                const QJsonArray results = responseJson.object().value("results").toArray();
+                int sentCount = 0;
+                int errorCount = 0;
+                for (const QJsonValue& value : results)
+                {
+                    const QString status = value.toObject().value("status").toString();
+                    if (status == "sent")
+                        ++sentCount;
+                    else
+                        ++errorCount;
+                }
+
+                if (sentCount > 0 && errorCount == 0)
+                    sendStatus = "РћС‚РїСЂР°РІР»РµРЅРѕ VK";
+                else if (sentCount > 0)
+                    sendStatus = "Р§Р°СЃС‚РёС‡РЅРѕ РѕС‚РїСЂР°РІР»РµРЅРѕ";
+                else
+                    sendStatus = "РћС€РёР±РєР° VK";
+            }
+        }
+        else
+        {
+            reply->abort();
+            sendStatus = "РћС€РёР±РєР° VK";
+            QMessageBox::warning(this, "VK backend", "Backend РЅРµ РѕС‚РІРµС‚РёР» Р·Р° 15 СЃРµРєСѓРЅРґ. РџСЂРѕРІРµСЂСЊС‚Рµ, С‡С‚Рѕ uvicorn Р·Р°РїСѓС‰РµРЅ.");
+        }
+
+        reply->deleteLater();
     }
 
     if (!DatabaseManager::instance().createNotification(
@@ -1634,6 +1763,8 @@ void BusinessMainWindow::onSendMessageClicked()
     }
 
     messageTextEdit->clear();
+    DatabaseManager::instance().updateLatestNotificationStatus(currentBusinessId, shiftId, sendStatus);
+
     loadUnnotifiedShiftOptions();
     loadNotificationsHistory();
 }

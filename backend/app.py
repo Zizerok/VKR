@@ -41,7 +41,7 @@ class ShiftPosition(BaseModel):
 
 
 class ShiftNotificationRequest(BaseModel):
-    shift_id: int
+    shift_id: int | None = None
     message: str
     user_ids: list[int]
     open_positions: list[ShiftPosition] = []
@@ -117,9 +117,9 @@ def vk_api(method: str, params: dict[str, Any]) -> dict[str, Any]:
     return data["response"]
 
 
-def build_shift_keyboard(shift_id: int, open_positions: list[ShiftPosition]) -> str:
+def build_shift_keyboard(shift_id: int | None, open_positions: list[ShiftPosition]) -> str:
     buttons = []
-    for open_position in open_positions:
+    for open_position in open_positions if shift_id else []:
         buttons.append(
             [
                 {
