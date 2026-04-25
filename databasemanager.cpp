@@ -1502,6 +1502,87 @@ QList<int> DatabaseManager::getVkRecipientIds(int businessId,
     return result;
 }
 
+QList<int> DatabaseManager::getVkRecipientIdsForShiftOpenPositions(int businessId, int shiftId)
+{
+    QList<int> result;
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT DISTINCT e.vk_id "
+        "FROM shift_open_positions sop "
+        "JOIN shifts s ON s.id = sop.shift_id "
+        "JOIN employees e ON e.business_id = s.business_id "
+        "LEFT JOIN positions employee_position "
+        "ON employee_position.business_id = e.business_id "
+        "AND employee_position.name = e.position "
+        "LEFT JOIN position_capabilities pc "
+        "ON pc.position_id = employee_position.id "
+        "LEFT JOIN positions covered_position "
+        "ON covered_position.id = pc.covered_position_id "
+        "WHERE s.business_id = :business_id "
+        "AND sop.shift_id = :shift_id "
+        "AND sop.employee_count > 0 "
+        "AND e.is_active = 1 "
+        "AND e.vk_id IS NOT NULL "
+        "AND TRIM(e.vk_id) <> '' "
+        "AND (e.position = sop.position_name OR covered_position.name = sop.position_name) "
+        "AND NOT EXISTS ("
+        "SELECT 1 FROM shift_assignments sa "
+        "WHERE sa.shift_id = sop.shift_id "
+        "AND sa.employee_id = e.id"
+        ")"
+        );
+    query.bindValue(":business_id", businessId);
+    query.bindValue(":shift_id", shiftId);
+
+    if (!query.exec())
+    {
+        qDebug() << "GET OPEN POSITION VK RECIPIENT IDS ERROR:" << query.lastError().text();
+        return result;
+    }
+
+    while (query.next())
+    {
+        bool ok = false;
+        const int vkId = query.value("vk_id").toString().trimmed().toInt(&ok);
+        if (ok && vkId > 0 && !result.contains(vkId))
+            result.append(vkId);
+    }
+
+    return result;
+}
+
+QList<int> DatabaseManager::getAssignedShiftVkRecipientIds(int shiftId)
+{
+    QList<int> result;
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT DISTINCT e.vk_id "
+        "FROM shift_assignments sa "
+        "JOIN employees e ON e.id = sa.employee_id "
+        "WHERE sa.shift_id = :shift_id "
+        "AND e.is_active = 1 "
+        "AND e.vk_id IS NOT NULL "
+        "AND TRIM(e.vk_id) <> ''"
+        );
+    query.bindValue(":shift_id", shiftId);
+
+    if (!query.exec())
+    {
+        qDebug() << "GET ASSIGNED SHIFT VK IDS ERROR:" << query.lastError().text();
+        return result;
+    }
+
+    while (query.next())
+    {
+        bool ok = false;
+        const int vkId = query.value("vk_id").toString().trimmed().toInt(&ok);
+        if (ok && vkId > 0 && !result.contains(vkId))
+            result.append(vkId);
+    }
+
+    return result;
+}
+
 QList<NotificationInfo> DatabaseManager::getNotifications(int businessId)
 {
     QList<NotificationInfo> result;

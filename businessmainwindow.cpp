@@ -1,9 +1,11 @@
-#include "businessmainwindow.h"
+﻿#include "businessmainwindow.h"
 #include "ui_businessmainwindow.h"
 
 #include "addemployeedialog.h"
 #include "addshiftdialog.h"
+#include "businesslist.h"
 #include "employeecardwindow.h"
+#include "login.h"
 #include "positioneditdialog.h"
 
 #include <QColor>
@@ -119,7 +121,7 @@ BusinessMainWindow::BusinessMainWindow(int currentUserId, int businessId, QWidge
     , ui(new Ui::BusinessMainWindow)
 {
     ui->setupUi(this);
-    Q_UNUSED(currentUserId);
+    this->currentUserId = currentUserId;
     currentBusinessId = businessId;
 
     setupNavigation();
@@ -971,6 +973,94 @@ void BusinessMainWindow::setupSettingsSection()
 {
     ui->labelSettingsPlaceholder->hide();
 
+    {
+        auto *settingsFrame = new QFrame(this);
+        auto *settingsLayout = new QVBoxLayout(settingsFrame);
+        settingsLayout->setSpacing(16);
+
+        auto *titleLabel = new QLabel(QString::fromUtf8("Настройки предприятия"), settingsFrame);
+        QFont titleFont = titleLabel->font();
+        titleFont.setBold(true);
+        titleFont.setPointSize(13);
+        titleLabel->setFont(titleFont);
+
+        auto *descriptionLabel = new QLabel(
+            QString::fromUtf8("VK-бот теперь является единым сервисом системы. Администратор предприятия не настраивает токены и API, а только включает уведомления и дает сотрудникам ссылку на бота."),
+            settingsFrame);
+        descriptionLabel->setWordWrap(true);
+
+        auto *botFrame = new QFrame(settingsFrame);
+        botFrame->setFrameShape(QFrame::StyledPanel);
+        auto *botLayout = new QVBoxLayout(botFrame);
+        auto *botTitleLabel = new QLabel(QString::fromUtf8("Единый VK-бот системы"), botFrame);
+        QFont botTitleFont = botTitleLabel->font();
+        botTitleFont.setBold(true);
+        botTitleLabel->setFont(botTitleFont);
+        auto *botInfoLabel = new QLabel(
+            QString::fromUtf8("Все предприятия используют один общий VK-бот. Сотрудники пишут боту один раз, после этого система сможет отправлять им уведомления о сменах, объявлениях и выплатах."),
+            botFrame);
+        botInfoLabel->setWordWrap(true);
+        botLayout->addWidget(botTitleLabel);
+        botLayout->addWidget(botInfoLabel);
+
+        auto *formLayout = new QFormLayout();
+        vkEnabledCheckBox = new QCheckBox(QString::fromUtf8("VK-уведомления включены"), settingsFrame);
+        vkGroupIdEdit = new QLineEdit(settingsFrame);
+        vkGroupIdEdit->setPlaceholderText(QString::fromUtf8("Например: https://vk.com/your_bot_or_group"));
+        vkCommunityTokenEdit = nullptr;
+        vkBackendUrlEdit = nullptr;
+
+        formLayout->addRow("", vkEnabledCheckBox);
+        formLayout->addRow(QString::fromUtf8("Ссылка для сотрудников:"), vkGroupIdEdit);
+
+        auto *buttonsLayout = new QHBoxLayout();
+        auto *saveSettingsButton = new QPushButton(QString::fromUtf8("Сохранить настройки"), settingsFrame);
+        auto *checkConnectionButton = new QPushButton(QString::fromUtf8("Проверить backend"), settingsFrame);
+        buttonsLayout->addWidget(saveSettingsButton);
+        buttonsLayout->addWidget(checkConnectionButton);
+        buttonsLayout->addStretch();
+
+        auto *accountActionsLayout = new QHBoxLayout();
+        auto *backToBusinessesButton = new QPushButton(QString::fromUtf8("К списку предприятий"), settingsFrame);
+        auto *logoutButton = new QPushButton(QString::fromUtf8("Выйти из аккаунта"), settingsFrame);
+        accountActionsLayout->addWidget(backToBusinessesButton);
+        accountActionsLayout->addWidget(logoutButton);
+        accountActionsLayout->addStretch();
+
+        vkConnectionStatusLabel = new QLabel(QString::fromUtf8("Статус: подключение не проверялось"), settingsFrame);
+        vkConnectionStatusLabel->setWordWrap(true);
+
+        settingsLayout->addWidget(titleLabel);
+        settingsLayout->addWidget(descriptionLabel);
+        settingsLayout->addWidget(botFrame);
+        settingsLayout->addLayout(formLayout);
+        settingsLayout->addLayout(buttonsLayout);
+        settingsLayout->addWidget(vkConnectionStatusLabel);
+        settingsLayout->addSpacing(18);
+        settingsLayout->addLayout(accountActionsLayout);
+        settingsLayout->addStretch();
+
+        ui->verticalLayoutSettings->addWidget(settingsFrame);
+
+        connect(saveSettingsButton, &QPushButton::clicked, this, &BusinessMainWindow::onSaveVkSettingsClicked);
+        connect(checkConnectionButton, &QPushButton::clicked, this, &BusinessMainWindow::onCheckVkConnectionClicked);
+        connect(backToBusinessesButton, &QPushButton::clicked, this, [this]() {
+            auto *businessList = new BusinessList(currentUserId);
+            businessList->setAttribute(Qt::WA_DeleteOnClose);
+            businessList->show();
+            close();
+        });
+        connect(logoutButton, &QPushButton::clicked, this, [this]() {
+            auto *loginWindow = new Login();
+            loginWindow->setAttribute(Qt::WA_DeleteOnClose);
+            loginWindow->show();
+            close();
+        });
+
+        loadVkSettings();
+        return;
+    }
+
     auto *settingsFrame = new QFrame(this);
     auto *settingsLayout = new QVBoxLayout(settingsFrame);
     settingsLayout->setSpacing(14);
@@ -1028,13 +1118,15 @@ void BusinessMainWindow::setupSettingsSection()
 
 void BusinessMainWindow::loadVkSettings()
 {
-    if (currentBusinessId < 0 || !vkGroupIdEdit || !vkCommunityTokenEdit || !vkBackendUrlEdit || !vkEnabledCheckBox)
+    if (currentBusinessId < 0 || !vkGroupIdEdit || !vkEnabledCheckBox)
         return;
 
     const VkSettingsData settings = DatabaseManager::instance().getVkSettings(currentBusinessId);
     vkGroupIdEdit->setText(settings.groupId);
-    vkCommunityTokenEdit->setText(settings.communityToken);
-    vkBackendUrlEdit->setText(settings.backendUrl);
+    if (vkCommunityTokenEdit)
+        vkCommunityTokenEdit->setText(settings.communityToken);
+    if (vkBackendUrlEdit)
+        vkBackendUrlEdit->setText(settings.backendUrl);
     vkEnabledCheckBox->setChecked(settings.isEnabled);
 }
 
@@ -1182,40 +1274,11 @@ void BusinessMainWindow::onCreateShiftClicked()
     AddShiftDialog dialog(currentBusinessId, -1, this);
     if (dialog.exec() == QDialog::Accepted)
     {
-        const int createdShiftId = dialog.savedShiftId();
-        const bool shouldOfferNotification = dialog.hasOpenPositions() && createdShiftId > 0;
-
         loadShiftMonthCalendar();
         loadShiftDayView();
         loadShiftList();
         loadPaymentsEmployees();
         loadUnnotifiedShiftOptions();
-
-        if (shouldOfferNotification
-            && QMessageBox::question(
-                this,
-                "Уведомление о смене",
-                "В смене есть свободные позиции. Создать уведомление для сотрудников через VK?") == QMessageBox::Yes)
-        {
-            const QString messageText = buildShiftNotificationText(createdShiftId);
-            if (DatabaseManager::instance().createNotification(
-                    currentBusinessId,
-                    createdShiftId,
-                    "all",
-                    "Все сотрудники",
-                    "Новая смена",
-                    messageText,
-                    "VK",
-                    "Ожидает VK"))
-            {
-                loadUnnotifiedShiftOptions();
-                loadNotificationsHistory();
-            }
-            else
-            {
-                QMessageBox::critical(this, "Ошибка", "Не удалось создать уведомление о смене.");
-            }
-        }
     }
 }
 
@@ -1637,16 +1700,22 @@ void BusinessMainWindow::onSendMessageClicked()
     QString sendStatus = "РћР¶РёРґР°РµС‚ VK";
     if (true)
     {
-        const QList<int> vkIds = DatabaseManager::instance().getVkRecipientIds(
-            currentBusinessId,
-            recipientCode,
-            recipientEmployeeId,
-            recipientPositionName
-            );
+        const QList<int> vkIds = isNewShiftMessage
+            ? DatabaseManager::instance().getVkRecipientIdsForShiftOpenPositions(currentBusinessId, shiftId)
+            : DatabaseManager::instance().getVkRecipientIds(
+                  currentBusinessId,
+                  recipientCode,
+                  recipientEmployeeId,
+                  recipientPositionName
+                  );
 
-        if (vkIds.isEmpty())
+        const QList<int> assignedVkIdsForShift = isNewShiftMessage
+            ? DatabaseManager::instance().getAssignedShiftVkRecipientIds(shiftId)
+            : QList<int>();
+
+        if (vkIds.isEmpty() && assignedVkIdsForShift.isEmpty())
         {
-            QMessageBox::warning(this, "РљРѕРјРјСѓРЅРёРєР°С†РёСЏ", "РќРµС‚ РїРѕРґС…РѕРґСЏС‰РёС… СЃРѕС‚СЂСѓРґРЅРёРєРѕРІ СЃ VK ID.");
+            QMessageBox::warning(this, "Коммуникация", "Нет подходящих сотрудников с VK ID.");
             return;
         }
 
@@ -1705,7 +1774,7 @@ void BusinessMainWindow::onSendMessageClicked()
 
             if (reply->error() != QNetworkReply::NoError || httpStatus < 200 || httpStatus >= 300)
             {
-                sendStatus = "РћС€РёР±РєР° VK";
+                sendStatus = "Ошибка VK";
                 QMessageBox::warning(
                     this,
                     "VK backend",
@@ -1735,17 +1804,57 @@ void BusinessMainWindow::onSendMessageClicked()
                 else if (sentCount > 0)
                     sendStatus = "Р§Р°СЃС‚РёС‡РЅРѕ РѕС‚РїСЂР°РІР»РµРЅРѕ";
                 else
-                    sendStatus = "РћС€РёР±РєР° VK";
+                    sendStatus = "Ошибка VK";
             }
         }
         else
         {
             reply->abort();
-            sendStatus = "РћС€РёР±РєР° VK";
-            QMessageBox::warning(this, "VK backend", "Backend РЅРµ РѕС‚РІРµС‚РёР» Р·Р° 15 СЃРµРєСѓРЅРґ. РџСЂРѕРІРµСЂСЊС‚Рµ, С‡С‚Рѕ uvicorn Р·Р°РїСѓС‰РµРЅ.");
+            sendStatus = "Ошибка VK";
+            QMessageBox::warning(this, "VK backend", "Backend не ответил за 15 секунд. Проверьте, что uvicorn запущен.");
         }
 
         reply->deleteLater();
+        if (vkIds.isEmpty() && !assignedVkIdsForShift.isEmpty())
+            sendStatus = QString::fromUtf8("Отправлено назначенным");
+
+        if (isNewShiftMessage)
+        {
+            const QList<int> assignedVkIds = DatabaseManager::instance().getAssignedShiftVkRecipientIds(shiftId);
+            if (!assignedVkIds.isEmpty())
+            {
+                QJsonArray assignedUserIds;
+                for (int vkId : assignedVkIds)
+                    assignedUserIds.append(vkId);
+
+                QJsonObject assignedPayload;
+                assignedPayload["shift_id"] = shiftId;
+                assignedPayload["message"] = QString::fromUtf8("Вы назначены на смену администратором.\n\n") + messageText;
+                assignedPayload["user_ids"] = assignedUserIds;
+                assignedPayload["open_positions"] = QJsonArray();
+
+                QNetworkAccessManager assignedManager;
+                QNetworkRequest assignedRequest{QUrl(backendUrl + "/api/send-shift-notification")};
+                assignedRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+                QEventLoop assignedLoop;
+                QTimer assignedTimer;
+                assignedTimer.setSingleShot(true);
+
+                QNetworkReply *assignedReply = assignedManager.post(
+                    assignedRequest,
+                    QJsonDocument(assignedPayload).toJson(QJsonDocument::Compact)
+                    );
+                connect(assignedReply, &QNetworkReply::finished, &assignedLoop, &QEventLoop::quit);
+                connect(&assignedTimer, &QTimer::timeout, &assignedLoop, &QEventLoop::quit);
+
+                assignedTimer.start(10000);
+                assignedLoop.exec();
+                if (!assignedTimer.isActive())
+                    assignedReply->abort();
+                assignedReply->deleteLater();
+            }
+        }
     }
 
     if (!DatabaseManager::instance().createNotification(
@@ -1806,6 +1915,40 @@ void BusinessMainWindow::onCheckVkConnectionClicked()
     if (!vkConnectionStatusLabel)
         return;
 
+    {
+        QNetworkAccessManager manager;
+        QNetworkRequest request{QUrl("http://127.0.0.1:8000/health")};
+
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+
+        QNetworkReply *reply = manager.get(request);
+        connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+
+        timer.start(5000);
+        loop.exec();
+
+        if (timer.isActive())
+        {
+            timer.stop();
+            const bool ok = reply->error() == QNetworkReply::NoError
+                && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200;
+            vkConnectionStatusLabel->setText(ok
+                ? QString::fromUtf8("Статус: backend доступен, VK-уведомления могут отправляться через единый бот.")
+                : QString::fromUtf8("Статус: backend ответил с ошибкой. Проверьте, что сервер запущен и /health работает."));
+        }
+        else
+        {
+            reply->abort();
+            vkConnectionStatusLabel->setText(QString::fromUtf8("Статус: backend не ответил за 5 секунд. Запустите uvicorn."));
+        }
+
+        reply->deleteLater();
+        return;
+    }
+
     const bool hasGroupId = vkGroupIdEdit && !vkGroupIdEdit->text().trimmed().isEmpty();
     const bool hasToken = vkCommunityTokenEdit && !vkCommunityTokenEdit->text().trimmed().isEmpty();
     const bool hasBackendUrl = vkBackendUrlEdit && !vkBackendUrlEdit->text().trimmed().isEmpty();
@@ -1821,3 +1964,4 @@ void BusinessMainWindow::onCheckVkConnectionClicked()
             "Статус: заполните ID группы, токен сообщества и URL backend-сервера.");
     }
 }
+

@@ -34,6 +34,7 @@ public:
 
 private:
     Ui::BusinessMainWindow *ui;
+    int currentUserId = -1;
     int currentBusinessId = -1;
     QDate currentShiftDate = QDate::currentDate();
     bool showingShiftArchive = false;

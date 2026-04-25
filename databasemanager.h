@@ -191,6 +191,8 @@ public:
                                  const QString& recipientCode,
                                  int employeeId,
                                  const QString& positionName);
+    QList<int> getVkRecipientIdsForShiftOpenPositions(int businessId, int shiftId);
+    QList<int> getAssignedShiftVkRecipientIds(int shiftId);
     QList<NotificationInfo> getNotifications(int businessId);
     QList<ShiftResponseInfo> getShiftResponses(int businessId);
     bool saveVkSettings(int businessId, const VkSettingsData& settings);
