@@ -23,7 +23,8 @@ SOURCES += \
     positioneditdialog.cpp \
     registration.cpp \
     security.cpp \
-    shifttemplatedialog.cpp
+    shifttemplatedialog.cpp \
+    statisticschartwidget.cpp
 
 HEADERS += \
     addemployeedialog.h \
@@ -37,7 +38,8 @@ HEADERS += \
     positioneditdialog.h \
     registration.h \
     security.h \
-    shifttemplatedialog.h
+    shifttemplatedialog.h \
+    statisticschartwidget.h
 
 FORMS += \
     businesslist.ui \

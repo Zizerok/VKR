@@ -8,6 +8,7 @@
 #include "login.h"
 #include "positioneditdialog.h"
 #include "shifttemplatedialog.h"
+#include "statisticschartwidget.h"
 
 #include <QColor>
 #include <QCheckBox>
@@ -19,6 +20,7 @@
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QEventLoop>
+#include <QDateEdit>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -33,7 +35,10 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
+#include <QGroupBox>
+#include <QScrollArea>
 #include <QSet>
+#include <QSqlQuery>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTabWidget>
@@ -113,6 +118,7 @@ BusinessMainWindow::BusinessMainWindow(QWidget *parent)
     setupStaffSection();
     setupPaymentsSection();
     setupCommunicationSection();
+    setupStatisticsSection();
     setupSettingsSection();
     showSection(0, "Смены");
 }
@@ -130,6 +136,7 @@ BusinessMainWindow::BusinessMainWindow(int currentUserId, int businessId, QWidge
     setupStaffSection();
     setupPaymentsSection();
     setupCommunicationSection();
+    setupStatisticsSection();
     setupSettingsSection();
 
     ui->labelBusinessTitle->setText(DatabaseManager::instance().getBusinessName(businessId));
@@ -156,7 +163,7 @@ void BusinessMainWindow::setupNavigation()
         showSection(3, "Коммуникация");
     });
     connect(ui->pushButtonSettings, &QPushButton::clicked, this, [this]() {
-        showSection(4, "Настройки");
+        showSection(5, "Настройки");
     });
 }
 
@@ -174,6 +181,8 @@ void BusinessMainWindow::showSection(int index, const QString& sectionTitle)
     else if (index == 3)
         ui->pushButtonCommunication->setChecked(true);
     else if (index == 4)
+        statisticsNavButton->setChecked(true);
+    else if (index == 5)
         ui->pushButtonSettings->setChecked(true);
 }
 
@@ -996,6 +1005,374 @@ void BusinessMainWindow::loadShiftResponses()
             lines << QString("Комментарий: %1").arg(response.responseMessage);
 
         shiftResponsesListWidget->addItem(new QListWidgetItem(lines.join("\n")));
+    }
+}
+
+void BusinessMainWindow::setupStatisticsSection()
+{
+    statisticsNavButton = new QPushButton("Статистика", this);
+    statisticsNavButton->setCheckable(true);
+    statisticsNavButton->setAutoExclusive(true);
+    ui->sidebarLayout->insertWidget(6, statisticsNavButton);
+    connect(statisticsNavButton, &QPushButton::clicked, this, [this]() {
+        showSection(4, "Статистика");
+        loadStatisticsSection();
+    });
+
+    statisticsPage = new QWidget(this);
+    auto *pageLayout = new QVBoxLayout(statisticsPage);
+    pageLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto *scrollArea = new QScrollArea(statisticsPage);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+
+    auto *container = new QWidget(scrollArea);
+    auto *containerLayout = new QVBoxLayout(container);
+    containerLayout->setSpacing(16);
+
+    auto *filterFrame = new QFrame(container);
+    auto *filterLayout = new QHBoxLayout(filterFrame);
+    auto *periodLabel = new QLabel("Период:", filterFrame);
+    statisticsStartDateEdit = new QDateEdit(QDate::currentDate().addMonths(-1), filterFrame);
+    statisticsStartDateEdit->setCalendarPopup(true);
+    statisticsStartDateEdit->setDisplayFormat("dd.MM.yyyy");
+    statisticsEndDateEdit = new QDateEdit(QDate::currentDate(), filterFrame);
+    statisticsEndDateEdit->setCalendarPopup(true);
+    statisticsEndDateEdit->setDisplayFormat("dd.MM.yyyy");
+    auto *refreshButton = new QPushButton("Обновить статистику", filterFrame);
+
+    filterLayout->addWidget(periodLabel);
+    filterLayout->addWidget(statisticsStartDateEdit);
+    filterLayout->addWidget(new QLabel("по", filterFrame));
+    filterLayout->addWidget(statisticsEndDateEdit);
+    filterLayout->addWidget(refreshButton);
+    filterLayout->addStretch();
+
+    auto createBlock = [container](const QString& title,
+                                   QLabel *&summaryLabel,
+                                   StatisticsChartWidget *&firstChartView,
+                                   StatisticsChartWidget *&secondChartView) {
+        auto *group = new QGroupBox(title, container);
+        auto *layout = new QVBoxLayout(group);
+        summaryLabel = new QLabel("-", group);
+        summaryLabel->setWordWrap(true);
+        summaryLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+        auto *chartsLayout = new QHBoxLayout();
+        firstChartView = new StatisticsChartWidget(group);
+        secondChartView = new StatisticsChartWidget(group);
+        chartsLayout->addWidget(firstChartView, 1);
+        chartsLayout->addWidget(secondChartView, 1);
+
+        layout->addWidget(summaryLabel);
+        layout->addLayout(chartsLayout);
+        return group;
+    };
+
+    containerLayout->addWidget(filterFrame);
+    containerLayout->addWidget(createBlock("Статистика по сменам",
+                                           shiftStatisticsSummaryLabel,
+                                           shiftStatusChartView,
+                                           shiftPositionsChartView));
+    containerLayout->addWidget(createBlock("Статистика по сотрудникам",
+                                           employeeStatisticsSummaryLabel,
+                                           employeePositionsChartView,
+                                           employeeActivityChartView));
+    containerLayout->addWidget(createBlock("Статистика по выплатам",
+                                           paymentStatisticsSummaryLabel,
+                                           paymentStatusChartView,
+                                           paymentTopEmployeesChartView));
+    containerLayout->addStretch();
+
+    scrollArea->setWidget(container);
+    pageLayout->addWidget(scrollArea);
+    ui->stackedWidgetSections->insertWidget(4, statisticsPage);
+
+    connect(refreshButton, &QPushButton::clicked, this, &BusinessMainWindow::onRefreshStatisticsClicked);
+}
+
+void BusinessMainWindow::loadStatisticsSection()
+{
+    if (currentBusinessId < 0
+        || !statisticsStartDateEdit
+        || !statisticsEndDateEdit
+        || !shiftStatusChartView
+        || !shiftPositionsChartView
+        || !employeePositionsChartView
+        || !employeeActivityChartView
+        || !paymentStatusChartView
+        || !paymentTopEmployeesChartView)
+    {
+        return;
+    }
+
+    const QDate startDate = statisticsStartDateEdit->date();
+    const QDate endDate = statisticsEndDateEdit->date();
+    if (!startDate.isValid() || !endDate.isValid() || startDate > endDate)
+    {
+        QMessageBox::warning(this, "Статистика", "Проверьте выбранный период.");
+        return;
+    }
+
+    int totalShifts = 0;
+    int completedShifts = 0;
+    int cancelledShifts = 0;
+    int unfilledShifts = 0;
+    QMap<QString, int> shiftPositionCounts;
+    QSet<int> shiftsWithOpenPositions;
+    QSet<int> uniqueShiftIds;
+
+    QSqlQuery shiftsQuery = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, startDate, endDate);
+    while (shiftsQuery.next())
+    {
+        const int shiftId = shiftsQuery.value("id").toInt();
+        const QString status = shiftsQuery.value("status").toString();
+        ++totalShifts;
+        uniqueShiftIds.insert(shiftId);
+
+        if (status.compare("Выполнена", Qt::CaseInsensitive) == 0)
+            ++completedShifts;
+        if (status.compare("Отменена", Qt::CaseInsensitive) == 0)
+            ++cancelledShifts;
+
+        const QList<ShiftAssignedEmployeeData> assignments = DatabaseManager::instance().getShiftAssignments(shiftId);
+        for (const ShiftAssignedEmployeeData& assignment : assignments)
+            shiftPositionCounts[assignment.positionName] += 1;
+
+        const QList<ShiftOpenPositionData> openPositions = DatabaseManager::instance().getShiftOpenPositions(shiftId);
+        for (const ShiftOpenPositionData& openPosition : openPositions)
+        {
+            shiftPositionCounts[openPosition.positionName] += openPosition.employeeCount;
+            if (openPosition.employeeCount > 0)
+                shiftsWithOpenPositions.insert(shiftId);
+        }
+    }
+    unfilledShifts = shiftsWithOpenPositions.size();
+
+    int activeEmployees = 0;
+    QMap<QString, int> employeesByPosition;
+    QSqlQuery employeesQuery = DatabaseManager::instance().getEmployees(currentBusinessId, true);
+    while (employeesQuery.next())
+    {
+        const bool isActive = employeesQuery.value("is_active").toInt() == 1;
+        if (isActive)
+            ++activeEmployees;
+        employeesByPosition[employeesQuery.value("position").toString()] += 1;
+    }
+
+    QMap<int, int> shiftsPerEmployee;
+    QMap<int, QString> employeeNames;
+    QMap<int, double> paymentTotalsByEmployee;
+    QMap<int, int> responseCountsByEmployee;
+    double totalAccrued = 0.0;
+    double totalPaid = 0.0;
+
+    QSqlQuery assignmentsQuery(DatabaseManager::instance().database());
+    assignmentsQuery.prepare(
+        "SELECT sa.id, sa.employee_id, e.full_name, s.id AS shift_id, s.shift_date, s.start_time, s.end_time, "
+        "sa.position_name, sa.payment_type, sa.hourly_rate, sa.fixed_rate, sa.percent_rate, "
+        "COALESCE(sa.revenue_amount, '') AS revenue_amount, COALESCE(sa.paid_at, '') AS paid_at, "
+        "COALESCE(sa.is_paid, 0) AS is_paid "
+        "FROM shift_assignments sa "
+        "JOIN shifts s ON s.id = sa.shift_id "
+        "JOIN employees e ON e.id = sa.employee_id "
+        "WHERE s.business_id = :business_id "
+        "AND s.shift_date >= :start_date "
+        "AND s.shift_date <= :end_date "
+        "ORDER BY s.shift_date ASC, e.full_name ASC");
+    assignmentsQuery.bindValue(":business_id", currentBusinessId);
+    assignmentsQuery.bindValue(":start_date", startDate.toString(Qt::ISODate));
+    assignmentsQuery.bindValue(":end_date", endDate.toString(Qt::ISODate));
+    assignmentsQuery.exec();
+
+    while (assignmentsQuery.next())
+    {
+        ShiftPaymentInfo payment;
+        payment.assignmentId = assignmentsQuery.value("id").toInt();
+        payment.shiftId = assignmentsQuery.value("shift_id").toInt();
+        payment.employeeId = assignmentsQuery.value("employee_id").toInt();
+        payment.employeeName = assignmentsQuery.value("full_name").toString();
+        payment.shiftDate = assignmentsQuery.value("shift_date").toString();
+        payment.timeRange = QString("%1 - %2")
+                                .arg(assignmentsQuery.value("start_time").toString(),
+                                     assignmentsQuery.value("end_time").toString());
+        payment.positionName = assignmentsQuery.value("position_name").toString();
+        payment.paymentType = assignmentsQuery.value("payment_type").toString();
+        payment.hourlyRate = assignmentsQuery.value("hourly_rate").toString();
+        payment.fixedRate = assignmentsQuery.value("fixed_rate").toString();
+        payment.percentRate = assignmentsQuery.value("percent_rate").toString();
+        payment.revenueAmount = assignmentsQuery.value("revenue_amount").toString();
+        payment.paidAt = assignmentsQuery.value("paid_at").toString();
+        payment.isPaid = assignmentsQuery.value("is_paid").toInt() == 1;
+
+        const double amount = calculatePaymentAmount(payment);
+        totalAccrued += amount;
+        if (payment.isPaid)
+        {
+            totalPaid += amount;
+        }
+
+        shiftsPerEmployee[payment.employeeId] += 1;
+        employeeNames[payment.employeeId] = payment.employeeName;
+        paymentTotalsByEmployee[payment.employeeId] += amount;
+    }
+
+    QSqlQuery responsesQuery(DatabaseManager::instance().database());
+    responsesQuery.prepare(
+        "SELECT employee_id, COUNT(*) AS response_count "
+        "FROM shift_responses "
+        "WHERE business_id = :business_id "
+        "AND created_at::date >= :start_date "
+        "AND created_at::date <= :end_date "
+        "AND employee_id IS NOT NULL "
+        "GROUP BY employee_id");
+    responsesQuery.bindValue(":business_id", currentBusinessId);
+    responsesQuery.bindValue(":start_date", startDate.toString(Qt::ISODate));
+    responsesQuery.bindValue(":end_date", endDate.toString(Qt::ISODate));
+    responsesQuery.exec();
+
+    while (responsesQuery.next())
+        responseCountsByEmployee[responsesQuery.value("employee_id").toInt()] = responsesQuery.value("response_count").toInt();
+
+    auto topFromIntMap = [](const QMap<QString, int>& map, int limit) {
+        QList<QPair<QString, int>> items;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+            items.append(qMakePair(it.key().trimmed().isEmpty() ? QString("Без должности") : it.key(), it.value()));
+        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+            if (left.second == right.second)
+                return left.first < right.first;
+            return left.second > right.second;
+        });
+        if (items.size() > limit)
+            items = items.mid(0, limit);
+        return items;
+    };
+
+    auto topFromEmployeeIntMap = [&employeeNames](const QMap<int, int>& map, int limit) {
+        QList<QPair<QString, int>> items;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+            items.append(qMakePair(employeeNames.value(it.key(), QString("Сотрудник %1").arg(it.key())), it.value()));
+        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+            if (left.second == right.second)
+                return left.first < right.first;
+            return left.second > right.second;
+        });
+        if (items.size() > limit)
+            items = items.mid(0, limit);
+        return items;
+    };
+
+    auto topFromEmployeeDoubleMap = [&employeeNames](const QMap<int, double>& map, int limit) {
+        QList<QPair<QString, double>> items;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+            items.append(qMakePair(employeeNames.value(it.key(), QString("Сотрудник %1").arg(it.key())), it.value()));
+        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+            if (qFuzzyCompare(left.second + 1.0, right.second + 1.0))
+                return left.first < right.first;
+            return left.second > right.second;
+        });
+        if (items.size() > limit)
+            items = items.mid(0, limit);
+        return items;
+    };
+
+    const QList<QPair<QString, int>> topPositions = topFromIntMap(shiftPositionCounts, 6);
+    const QList<QPair<QString, int>> positionDistribution = topFromIntMap(employeesByPosition, 6);
+    const QList<QPair<QString, int>> topEmployeesByShifts = topFromEmployeeIntMap(shiftsPerEmployee, 6);
+    const QList<QPair<QString, int>> topResponders = topFromEmployeeIntMap(responseCountsByEmployee, 3);
+    const QList<QPair<QString, double>> topEmployeesByPayments = topFromEmployeeDoubleMap(paymentTotalsByEmployee, 6);
+
+    QString respondersText = "Нет откликов через VK";
+    if (!topResponders.isEmpty())
+    {
+        QStringList responderLines;
+        for (const auto& responder : topResponders)
+            responderLines << QString("%1 (%2)").arg(responder.first).arg(responder.second);
+        respondersText = responderLines.join(", ");
+    }
+
+    shiftStatisticsSummaryLabel->setText(
+        QString("Смен создано: %1\nВыполнено: %2\nОтменено: %3\nНеукомплектовано: %4")
+            .arg(totalShifts)
+            .arg(completedShifts)
+            .arg(cancelledShifts)
+            .arg(unfilledShifts));
+
+    employeeStatisticsSummaryLabel->setText(
+        QString("Активных сотрудников: %1\nСотрудников по должностям: %2\nТоп по откликам VK: %3")
+            .arg(activeEmployees)
+            .arg(employeesByPosition.size())
+            .arg(respondersText));
+
+    const double unpaidAmount = std::max(0.0, totalAccrued - totalPaid);
+    const double averagePerShift = uniqueShiftIds.isEmpty() ? 0.0 : totalAccrued / uniqueShiftIds.size();
+    paymentStatisticsSummaryLabel->setText(
+        QString("Начислено: %1\nВыплачено: %2\nНе выплачено: %3\nСредняя выплата за смену: %4")
+            .arg(QString::number(totalAccrued, 'f', 2))
+            .arg(QString::number(totalPaid, 'f', 2))
+            .arg(QString::number(unpaidAmount, 'f', 2))
+            .arg(QString::number(averagePerShift, 'f', 2)));
+
+    shiftStatusChartView->setPieData(
+        "Состояние смен",
+        {
+            {"Выполнено", static_cast<double>(completedShifts)},
+            {"Отменено", static_cast<double>(cancelledShifts)},
+            {"Неукомплектовано", static_cast<double>(unfilledShifts)},
+            {"Остальные", static_cast<double>(std::max(0, totalShifts - completedShifts - cancelledShifts))}
+        },
+        {QColor(34, 197, 94), QColor(239, 68, 68), QColor(245, 158, 11), QColor(59, 130, 246)});
+
+    {
+        QStringList categories;
+        QList<double> values;
+        for (const auto& item : topPositions)
+        {
+            categories << item.first;
+            values << item.second;
+        }
+        shiftPositionsChartView->setBarData("Популярные должности в сменах", categories, values, QColor(37, 99, 235));
+    }
+
+    {
+        QList<QPair<QString, double>> pieValues;
+        for (const auto& item : positionDistribution)
+            pieValues.append(qMakePair(item.first, static_cast<double>(item.second)));
+        employeePositionsChartView->setPieData(
+            "Сотрудники по должностям",
+            pieValues,
+            {QColor(99, 102, 241), QColor(16, 185, 129), QColor(249, 115, 22), QColor(236, 72, 153), QColor(20, 184, 166), QColor(234, 179, 8)});
+    }
+
+    {
+        QStringList categories;
+        QList<double> values;
+        for (const auto& item : topEmployeesByShifts)
+        {
+            categories << item.first;
+            values << item.second;
+        }
+        employeeActivityChartView->setBarData("Кто чаще выходит в смены", categories, values, QColor(124, 58, 237));
+    }
+
+    paymentStatusChartView->setPieData(
+        "Выплаты за период",
+        {
+            {"Выплачено", totalPaid},
+            {"Не выплачено", unpaidAmount}
+        },
+        {QColor(34, 197, 94), QColor(239, 68, 68)});
+
+    {
+        QStringList categories;
+        QList<double> values;
+        for (const auto& item : topEmployeesByPayments)
+        {
+            categories << item.first;
+            values << item.second;
+        }
+        paymentTopEmployeesChartView->setBarData("Топ сотрудников по сумме выплат", categories, values, QColor(14, 165, 233));
     }
 }
 
@@ -1930,6 +2307,11 @@ void BusinessMainWindow::onClearMessageClicked()
 void BusinessMainWindow::onRefreshShiftResponsesClicked()
 {
     loadShiftResponses();
+}
+
+void BusinessMainWindow::onRefreshStatisticsClicked()
+{
+    loadStatisticsSection();
 }
 
 void BusinessMainWindow::onSaveVkSettingsClicked()

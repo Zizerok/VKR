@@ -11,6 +11,7 @@
 
 class QTableWidget;
 class QComboBox;
+class QDateEdit;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -18,6 +19,8 @@ class QTextEdit;
 class QLineEdit;
 class QTabWidget;
 class QCheckBox;
+class QWidget;
+class StatisticsChartWidget;
 
 namespace Ui {
 class BusinessMainWindow;
@@ -70,6 +73,19 @@ private:
     QPushButton *clearMessageButton = nullptr;
     QListWidget *notificationsHistoryListWidget = nullptr;
     QListWidget *shiftResponsesListWidget = nullptr;
+    QPushButton *statisticsNavButton = nullptr;
+    QWidget *statisticsPage = nullptr;
+    QDateEdit *statisticsStartDateEdit = nullptr;
+    QDateEdit *statisticsEndDateEdit = nullptr;
+    QLabel *shiftStatisticsSummaryLabel = nullptr;
+    QLabel *employeeStatisticsSummaryLabel = nullptr;
+    QLabel *paymentStatisticsSummaryLabel = nullptr;
+    StatisticsChartWidget *shiftStatusChartView = nullptr;
+    StatisticsChartWidget *shiftPositionsChartView = nullptr;
+    StatisticsChartWidget *employeePositionsChartView = nullptr;
+    StatisticsChartWidget *employeeActivityChartView = nullptr;
+    StatisticsChartWidget *paymentStatusChartView = nullptr;
+    StatisticsChartWidget *paymentTopEmployeesChartView = nullptr;
     QLineEdit *vkGroupIdEdit = nullptr;
     QLineEdit *vkCommunityTokenEdit = nullptr;
     QLineEdit *vkBackendUrlEdit = nullptr;
@@ -109,6 +125,8 @@ private:
     void loadNotificationsHistory();
     void loadShiftResponses();
     void setupSettingsSection();
+    void setupStatisticsSection();
+    void loadStatisticsSection();
     void loadVkSettings();
 
 private slots:
@@ -135,6 +153,7 @@ private slots:
     void onSendMessageClicked();
     void onClearMessageClicked();
     void onRefreshShiftResponsesClicked();
+    void onRefreshStatisticsClicked();
     void onSaveVkSettingsClicked();
     void onCheckVkConnectionClicked();
 };
