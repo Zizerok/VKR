@@ -7,6 +7,7 @@
 #include "employeecardwindow.h"
 #include "login.h"
 #include "positioneditdialog.h"
+#include "shifttemplatedialog.h"
 
 #include <QColor>
 #include <QCheckBox>
@@ -181,10 +182,14 @@ void BusinessMainWindow::setupShiftsSection()
     setupShiftMonthCalendar();
     setupShiftDayView();
 
+    shiftTemplatesButton = new QPushButton("Шаблоны смен", this);
+    ui->shiftHeaderLayout->insertWidget(3, shiftTemplatesButton);
+
     connect(ui->pushButtonCreateShift, &QPushButton::clicked, this, &BusinessMainWindow::onCreateShiftClicked);
     connect(ui->pushButtonEditShift, &QPushButton::clicked, this, &BusinessMainWindow::onEditShiftClicked);
     connect(ui->pushButtonDeleteShift, &QPushButton::clicked, this, &BusinessMainWindow::onDeleteShiftClicked);
     connect(ui->pushButtonShiftArchiveToggle, &QPushButton::clicked, this, &BusinessMainWindow::onToggleShiftArchiveClicked);
+    connect(shiftTemplatesButton, &QPushButton::clicked, this, &BusinessMainWindow::onManageShiftTemplatesClicked);
 
     connect(ui->pushButtonShiftMonthView, &QPushButton::clicked, this, [this]() {
         showShiftsSubsection(0, "Календарь смен на месяц");
@@ -355,6 +360,8 @@ void BusinessMainWindow::loadShiftMonthCalendar()
         return;
 
     QMap<QDate, QStringList> shiftsByDate;
+    QMap<QDate, bool> hasShiftsByDate;
+    QMap<QDate, bool> hasOpenPositionsByDate;
     QSqlQuery query = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, firstDay, lastDay);
     while (query.next())
     {
@@ -367,8 +374,13 @@ void BusinessMainWindow::loadShiftMonthCalendar()
         QSet<QString> positions;
         for (const ShiftAssignedEmployeeData& assignment : DatabaseManager::instance().getShiftAssignments(shiftId))
             positions.insert(assignment.positionName);
-        for (const ShiftOpenPositionData& openPosition : DatabaseManager::instance().getShiftOpenPositions(shiftId))
+        const QList<ShiftOpenPositionData> openPositions = DatabaseManager::instance().getShiftOpenPositions(shiftId);
+        for (const ShiftOpenPositionData& openPosition : openPositions)
             positions.insert(openPosition.positionName);
+
+        hasShiftsByDate[shiftDate] = true;
+        if (!openPositions.isEmpty())
+            hasOpenPositionsByDate[shiftDate] = true;
 
         QStringList sortedPositions = positions.values();
         std::sort(sortedPositions.begin(), sortedPositions.end());
@@ -408,8 +420,26 @@ void BusinessMainWindow::loadShiftMonthCalendar()
         item->setTextAlignment(Qt::AlignLeft | Qt::AlignTop);
         item->setFlags(Qt::ItemIsEnabled);
         item->setToolTip(tooltipOnly ? fullText : QString());
-        if (cellDate == QDate::currentDate())
-            item->setBackground(QColor(255, 248, 220));
+
+        const bool isToday = (cellDate == QDate::currentDate());
+        const bool hasShifts = hasShiftsByDate.value(cellDate, false);
+        const bool hasOpenPositions = hasOpenPositionsByDate.value(cellDate, false);
+
+        if (isToday)
+        {
+            item->setBackground(QColor(255, 243, 205));
+        }
+        else if (hasShifts && cellDate < QDate::currentDate())
+        {
+            item->setBackground(QColor(226, 232, 240));
+        }
+        else if (hasShifts && cellDate > QDate::currentDate())
+        {
+            item->setBackground(hasOpenPositions
+                ? QColor(254, 226, 226)
+                : QColor(220, 252, 231));
+        }
+
         shiftMonthTable->setItem(row, column, item);
     }
 }
@@ -1346,6 +1376,19 @@ void BusinessMainWindow::onToggleShiftArchiveClicked()
     loadShiftList();
     updateShiftListMode();
     updateShiftPeriodLabel();
+}
+
+void BusinessMainWindow::onManageShiftTemplatesClicked()
+{
+    ShiftTemplateDialog dialog(currentBusinessId, this);
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        loadShiftMonthCalendar();
+        loadShiftDayView();
+        loadShiftList();
+        loadPaymentsEmployees();
+        loadUnnotifiedShiftOptions();
+    }
 }
 
 void BusinessMainWindow::onAddEmployeeClicked()

@@ -281,6 +281,45 @@ void DatabaseManager::createTables()
         );
 
     query.exec(
+        "CREATE TABLE IF NOT EXISTS shift_templates ("
+        "id SERIAL PRIMARY KEY,"
+        "business_id INTEGER NOT NULL,"
+        "name TEXT NOT NULL,"
+        "start_time TEXT NOT NULL,"
+        "end_time TEXT NOT NULL,"
+        "status TEXT NOT NULL,"
+        "comment TEXT,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        ")"
+        );
+
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS shift_template_assignments ("
+        "id SERIAL PRIMARY KEY,"
+        "template_id INTEGER NOT NULL,"
+        "employee_id INTEGER NOT NULL,"
+        "position_name TEXT NOT NULL,"
+        "payment_type TEXT NOT NULL,"
+        "hourly_rate TEXT,"
+        "fixed_rate TEXT,"
+        "percent_rate TEXT"
+        ")"
+        );
+
+    query.exec(
+        "CREATE TABLE IF NOT EXISTS shift_template_open_positions ("
+        "id SERIAL PRIMARY KEY,"
+        "template_id INTEGER NOT NULL,"
+        "position_name TEXT NOT NULL,"
+        "employee_count INTEGER NOT NULL,"
+        "payment_type TEXT NOT NULL,"
+        "hourly_rate TEXT,"
+        "fixed_rate TEXT,"
+        "percent_rate TEXT"
+        ")"
+        );
+
+    query.exec(
         "CREATE TABLE IF NOT EXISTS notifications ("
         "id SERIAL PRIMARY KEY,"
         "business_id INTEGER NOT NULL,"
@@ -1168,6 +1207,290 @@ QSqlQuery DatabaseManager::getAllShifts(int businessId)
     query.bindValue(":business_id", businessId);
     query.exec();
     return query;
+}
+
+QSqlQuery DatabaseManager::getShiftTemplates(int businessId)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT id, name, start_time, end_time, status, comment, created_at "
+        "FROM shift_templates "
+        "WHERE business_id = :business_id "
+        "ORDER BY name ASC, id ASC"
+        );
+    query.bindValue(":business_id", businessId);
+    query.exec();
+    return query;
+}
+
+QSqlQuery DatabaseManager::getShiftTemplateById(int templateId)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT id, business_id, name, start_time, end_time, status, comment, created_at "
+        "FROM shift_templates "
+        "WHERE id = :id"
+        );
+    query.bindValue(":id", templateId);
+    query.exec();
+    return query;
+}
+
+QList<ShiftAssignedEmployeeData> DatabaseManager::getShiftTemplateAssignments(int templateId)
+{
+    QList<ShiftAssignedEmployeeData> assignments;
+
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT sta.employee_id, e.full_name, sta.position_name, sta.payment_type, "
+        "sta.hourly_rate, sta.fixed_rate, sta.percent_rate "
+        "FROM shift_template_assignments sta "
+        "JOIN employees e ON e.id = sta.employee_id "
+        "WHERE sta.template_id = :template_id "
+        "ORDER BY sta.position_name ASC, e.full_name ASC"
+        );
+    query.bindValue(":template_id", templateId);
+    query.exec();
+
+    while (query.next())
+    {
+        ShiftAssignedEmployeeData item;
+        item.employeeId = query.value("employee_id").toInt();
+        item.employeeName = query.value("full_name").toString();
+        item.positionName = query.value("position_name").toString();
+        item.paymentType = query.value("payment_type").toString();
+        item.hourlyRate = query.value("hourly_rate").toString();
+        item.fixedRate = query.value("fixed_rate").toString();
+        item.percentRate = query.value("percent_rate").toString();
+        assignments.append(item);
+    }
+
+    return assignments;
+}
+
+QList<ShiftOpenPositionData> DatabaseManager::getShiftTemplateOpenPositions(int templateId)
+{
+    QList<ShiftOpenPositionData> openPositions;
+
+    QSqlQuery query(db);
+    query.prepare(
+        "SELECT position_name, employee_count, payment_type, hourly_rate, fixed_rate, percent_rate "
+        "FROM shift_template_open_positions "
+        "WHERE template_id = :template_id "
+        "ORDER BY position_name ASC"
+        );
+    query.bindValue(":template_id", templateId);
+    query.exec();
+
+    while (query.next())
+    {
+        ShiftOpenPositionData item;
+        item.positionName = query.value("position_name").toString();
+        item.employeeCount = query.value("employee_count").toInt();
+        item.paymentType = query.value("payment_type").toString();
+        item.hourlyRate = query.value("hourly_rate").toString();
+        item.fixedRate = query.value("fixed_rate").toString();
+        item.percentRate = query.value("percent_rate").toString();
+        openPositions.append(item);
+    }
+
+    return openPositions;
+}
+
+bool DatabaseManager::createShiftTemplateFromShift(int businessId, int shiftId, const QString& name)
+{
+    QSqlQuery shiftQuery = getShiftById(shiftId);
+    if (!shiftQuery.next())
+        return false;
+
+    const QList<ShiftAssignedEmployeeData> assignments = getShiftAssignments(shiftId);
+    const QList<ShiftOpenPositionData> openPositions = getShiftOpenPositions(shiftId);
+
+    if (!db.transaction())
+        qDebug() << "CREATE SHIFT TEMPLATE TRANSACTION START ERROR:" << db.lastError().text();
+
+    QSqlQuery templateQuery(db);
+    templateQuery.prepare(
+        "INSERT INTO shift_templates (business_id, name, start_time, end_time, status, comment) "
+        "VALUES (:business_id, :name, :start_time, :end_time, :status, :comment) "
+        "RETURNING id"
+        );
+    templateQuery.bindValue(":business_id", businessId);
+    templateQuery.bindValue(":name", name.trimmed());
+    templateQuery.bindValue(":start_time", shiftQuery.value("start_time").toString());
+    templateQuery.bindValue(":end_time", shiftQuery.value("end_time").toString());
+    templateQuery.bindValue(":status", shiftQuery.value("status").toString());
+    templateQuery.bindValue(":comment", shiftQuery.value("comment").toString());
+
+    if (!templateQuery.exec() || !templateQuery.next())
+    {
+        qDebug() << "CREATE SHIFT TEMPLATE ERROR:" << templateQuery.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    const int templateId = templateQuery.value("id").toInt();
+
+    for (const ShiftAssignedEmployeeData& assignment : assignments)
+    {
+        QSqlQuery assignmentQuery(db);
+        assignmentQuery.prepare(
+            "INSERT INTO shift_template_assignments ("
+            "template_id, employee_id, position_name, payment_type, hourly_rate, fixed_rate, percent_rate"
+            ") VALUES ("
+            ":template_id, :employee_id, :position_name, :payment_type, :hourly_rate, :fixed_rate, :percent_rate"
+            ")"
+            );
+        assignmentQuery.bindValue(":template_id", templateId);
+        assignmentQuery.bindValue(":employee_id", assignment.employeeId);
+        assignmentQuery.bindValue(":position_name", assignment.positionName.trimmed());
+        assignmentQuery.bindValue(":payment_type", assignment.paymentType.trimmed());
+        assignmentQuery.bindValue(":hourly_rate", assignment.hourlyRate.trimmed());
+        assignmentQuery.bindValue(":fixed_rate", assignment.fixedRate.trimmed());
+        assignmentQuery.bindValue(":percent_rate", assignment.percentRate.trimmed());
+
+        if (!assignmentQuery.exec())
+        {
+            qDebug() << "CREATE SHIFT TEMPLATE ASSIGNMENT ERROR:" << assignmentQuery.lastError().text();
+            db.rollback();
+            return false;
+        }
+    }
+
+    for (const ShiftOpenPositionData& openPosition : openPositions)
+    {
+        QSqlQuery openPositionQuery(db);
+        openPositionQuery.prepare(
+            "INSERT INTO shift_template_open_positions ("
+            "template_id, position_name, employee_count, payment_type, hourly_rate, fixed_rate, percent_rate"
+            ") VALUES ("
+            ":template_id, :position_name, :employee_count, :payment_type, :hourly_rate, :fixed_rate, :percent_rate"
+            ")"
+            );
+        openPositionQuery.bindValue(":template_id", templateId);
+        openPositionQuery.bindValue(":position_name", openPosition.positionName.trimmed());
+        openPositionQuery.bindValue(":employee_count", openPosition.employeeCount);
+        openPositionQuery.bindValue(":payment_type", openPosition.paymentType.trimmed());
+        openPositionQuery.bindValue(":hourly_rate", openPosition.hourlyRate.trimmed());
+        openPositionQuery.bindValue(":fixed_rate", openPosition.fixedRate.trimmed());
+        openPositionQuery.bindValue(":percent_rate", openPosition.percentRate.trimmed());
+
+        if (!openPositionQuery.exec())
+        {
+            qDebug() << "CREATE SHIFT TEMPLATE OPEN POSITION ERROR:" << openPositionQuery.lastError().text();
+            db.rollback();
+            return false;
+        }
+    }
+
+    if (!db.commit())
+    {
+        qDebug() << "CREATE SHIFT TEMPLATE TRANSACTION COMMIT ERROR:" << db.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteShiftTemplate(int templateId)
+{
+    if (!db.transaction())
+        qDebug() << "DELETE SHIFT TEMPLATE TRANSACTION START ERROR:" << db.lastError().text();
+
+    QSqlQuery deleteAssignments(db);
+    deleteAssignments.prepare("DELETE FROM shift_template_assignments WHERE template_id = :template_id");
+    deleteAssignments.bindValue(":template_id", templateId);
+    if (!deleteAssignments.exec())
+    {
+        qDebug() << "DELETE SHIFT TEMPLATE ASSIGNMENTS ERROR:" << deleteAssignments.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    QSqlQuery deleteOpenPositions(db);
+    deleteOpenPositions.prepare("DELETE FROM shift_template_open_positions WHERE template_id = :template_id");
+    deleteOpenPositions.bindValue(":template_id", templateId);
+    if (!deleteOpenPositions.exec())
+    {
+        qDebug() << "DELETE SHIFT TEMPLATE OPEN POSITIONS ERROR:" << deleteOpenPositions.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    QSqlQuery deleteTemplate(db);
+    deleteTemplate.prepare("DELETE FROM shift_templates WHERE id = :id");
+    deleteTemplate.bindValue(":id", templateId);
+    if (!deleteTemplate.exec())
+    {
+        qDebug() << "DELETE SHIFT TEMPLATE ERROR:" << deleteTemplate.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    if (!db.commit())
+    {
+        qDebug() << "DELETE SHIFT TEMPLATE TRANSACTION COMMIT ERROR:" << db.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::applyShiftTemplate(int templateId, const QList<QDate>& dates, int *createdCount, int *skippedCount)
+{
+    if (createdCount)
+        *createdCount = 0;
+    if (skippedCount)
+        *skippedCount = 0;
+
+    QSqlQuery templateQuery = getShiftTemplateById(templateId);
+    if (!templateQuery.next())
+        return false;
+
+    const int businessId = templateQuery.value("business_id").toInt();
+    const QTime startTime = QTime::fromString(templateQuery.value("start_time").toString(), "HH:mm");
+    const QTime endTime = QTime::fromString(templateQuery.value("end_time").toString(), "HH:mm");
+    const QString status = templateQuery.value("status").toString();
+    const QString comment = templateQuery.value("comment").toString();
+    const QList<ShiftAssignedEmployeeData> assignments = getShiftTemplateAssignments(templateId);
+    const QList<ShiftOpenPositionData> openPositions = getShiftTemplateOpenPositions(templateId);
+
+    for (const QDate& date : dates)
+    {
+        if (!date.isValid())
+            continue;
+
+        QSqlQuery duplicateQuery(db);
+        duplicateQuery.prepare(
+            "SELECT id FROM shifts "
+            "WHERE business_id = :business_id "
+            "AND shift_date = :shift_date "
+            "AND start_time = :start_time "
+            "AND end_time = :end_time "
+            "LIMIT 1"
+            );
+        duplicateQuery.bindValue(":business_id", businessId);
+        duplicateQuery.bindValue(":shift_date", date.toString(Qt::ISODate));
+        duplicateQuery.bindValue(":start_time", startTime.toString("HH:mm"));
+        duplicateQuery.bindValue(":end_time", endTime.toString("HH:mm"));
+
+        if (duplicateQuery.exec() && duplicateQuery.next())
+        {
+            if (skippedCount)
+                ++(*skippedCount);
+            continue;
+        }
+
+        if (createShift(businessId, date, startTime, endTime, status, comment, assignments, openPositions))
+        {
+            if (createdCount)
+                ++(*createdCount);
+        }
+    }
+
+    return true;
 }
 
 QStringList DatabaseManager::getShiftAssignedSummary(int shiftId)

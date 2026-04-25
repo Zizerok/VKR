@@ -82,6 +82,17 @@ struct ShiftResponseInfo
     QString processedAt;
 };
 
+struct ShiftTemplateInfo
+{
+    int id = -1;
+    QString name;
+    QString startTime;
+    QString endTime;
+    QString status;
+    QString comment;
+    QString createdAt;
+};
+
 struct VkSettingsData
 {
     QString groupId;
@@ -171,6 +182,13 @@ public:
     QSqlQuery getShiftsForList(int businessId, const QDate& fromDate);
     QSqlQuery getShiftsWithoutNewShiftNotification(int businessId);
     QSqlQuery getAllShifts(int businessId);
+    QSqlQuery getShiftTemplates(int businessId);
+    QSqlQuery getShiftTemplateById(int templateId);
+    QList<ShiftAssignedEmployeeData> getShiftTemplateAssignments(int templateId);
+    QList<ShiftOpenPositionData> getShiftTemplateOpenPositions(int templateId);
+    bool createShiftTemplateFromShift(int businessId, int shiftId, const QString& name);
+    bool deleteShiftTemplate(int templateId);
+    bool applyShiftTemplate(int templateId, const QList<QDate>& dates, int *createdCount = nullptr, int *skippedCount = nullptr);
     QStringList getShiftAssignedSummary(int shiftId);
     QStringList getShiftOpenPositionsSummary(int shiftId);
     QList<EmployeePaymentSummary> getEmployeePaymentSummaries(int businessId);

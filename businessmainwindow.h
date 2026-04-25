@@ -42,6 +42,7 @@ private:
     int currentDayShiftIndex = 0;
     QList<int> currentDayShiftIds;
     QLabel *shiftDayCounterLabel = nullptr;
+    QPushButton *shiftTemplatesButton = nullptr;
     QPushButton *shiftDayPreviousButton = nullptr;
     QPushButton *shiftDayNextButton = nullptr;
     QLabel *shiftDayTimeLabel = nullptr;
@@ -118,6 +119,7 @@ private slots:
     void onEditShiftClicked();
     void onDeleteShiftClicked();
     void onToggleShiftArchiveClicked();
+    void onManageShiftTemplatesClicked();
 
     void onAddEmployeeClicked();
     void onEmployeeItemDoubleClicked(QListWidgetItem *item);
