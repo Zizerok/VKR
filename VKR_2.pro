@@ -12,6 +12,7 @@ CONFIG += c++17
 
 SOURCES += \
     activitylogdialog.cpp \
+    addbusinessdialog.cpp \
     addemployeedialog.cpp \
     addshiftdialog.cpp \
     businesslist.cpp \
@@ -29,6 +30,7 @@ SOURCES += \
 
 HEADERS += \
     activitylogdialog.h \
+    addbusinessdialog.h \
     addemployeedialog.h \
     addshiftdialog.h \
     businesslist.h \

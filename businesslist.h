@@ -4,7 +4,6 @@
 #include <QDialog>
 #include "databasemanager.h"
 #include <QSqlQuery>
-#include <QInputDialog>
 #include "businessmainwindow.h"
 #include <QListWidgetItem>
 
@@ -25,13 +24,16 @@ public:
 
 private slots:
     void on_pushButton_add_clicked();
-
+    void on_pushButton_delete_clicked();
+    void on_pushButton_open_clicked();
     void on_listWidget_business_itemDoubleClicked(QListWidgetItem *item);
 
 private:
     Ui::BusinessList *ui;
     void loadBusinesses(int userid);
-    int currentUserId;
+    void applyStyles();
+    void updateSelectionState();
+    int currentUserId = -1;
 };
 
 #endif // BUSINESSLIST_H

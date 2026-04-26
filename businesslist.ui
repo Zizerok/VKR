@@ -6,49 +6,236 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>893</width>
-    <height>588</height>
+    <width>1040</width>
+    <height>680</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>Предприятия</string>
   </property>
-  <widget class="QListWidget" name="listWidget_business">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>10</y>
-     <width>571</width>
-     <height>501</height>
-    </rect>
+  <property name="minimumSize">
+   <size>
+    <width>1040</width>
+    <height>680</height>
+   </size>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayout">
+   <property name="leftMargin">
+    <number>24</number>
    </property>
-  </widget>
-  <widget class="QPushButton" name="pushButton_add">
-   <property name="geometry">
-    <rect>
-     <x>700</x>
-     <y>90</y>
-     <width>80</width>
-     <height>24</height>
-    </rect>
+   <property name="topMargin">
+    <number>24</number>
    </property>
-   <property name="text">
-    <string>Добавить</string>
+   <property name="rightMargin">
+    <number>24</number>
    </property>
-  </widget>
-  <widget class="QPushButton" name="pushButton_delete">
-   <property name="geometry">
-    <rect>
-     <x>700</x>
-     <y>130</y>
-     <width>80</width>
-     <height>24</height>
-    </rect>
+   <property name="bottomMargin">
+    <number>24</number>
    </property>
-   <property name="text">
-    <string>Удалить</string>
+   <property name="spacing">
+    <number>18</number>
    </property>
-  </widget>
+   <item>
+    <widget class="QFrame" name="frameMainCard">
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="mainCardLayout">
+      <property name="leftMargin">
+       <number>24</number>
+      </property>
+      <property name="topMargin">
+       <number>24</number>
+      </property>
+      <property name="rightMargin">
+       <number>24</number>
+      </property>
+      <property name="bottomMargin">
+       <number>24</number>
+      </property>
+      <property name="spacing">
+       <number>14</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="labelTitle">
+        <property name="font">
+         <font>
+          <pointsize>18</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="text">
+         <string>Мои предприятия</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelSubtitle">
+        <property name="text">
+         <string>Выберите предприятие для продолжения работы или создайте новое.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_search">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>42</height>
+         </size>
+        </property>
+        <property name="placeholderText">
+         <string>Поиск по предприятиям</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelEmptyState">
+        <property name="text">
+         <string>У вас пока нет предприятий. Создайте первое, чтобы начать работу.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QListWidget" name="listWidget_business">
+        <property name="alternatingRowColors">
+         <bool>false</bool>
+        </property>
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::SingleSelection</enum>
+        </property>
+        <property name="verticalScrollMode">
+         <enum>QAbstractItemView::ScrollPerPixel</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="frameActionsCard">
+     <property name="minimumSize">
+      <size>
+       <width>260</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>260</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="actionsLayout">
+      <property name="leftMargin">
+       <number>22</number>
+      </property>
+      <property name="topMargin">
+       <number>22</number>
+      </property>
+      <property name="rightMargin">
+       <number>22</number>
+      </property>
+      <property name="bottomMargin">
+       <number>22</number>
+      </property>
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="labelActionsTitle">
+        <property name="font">
+         <font>
+          <pointsize>14</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="text">
+         <string>Действия</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelSelectedBusiness">
+        <property name="text">
+         <string>Предприятие не выбрано</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_add">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>48</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Создать предприятие</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_open">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>48</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Открыть</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_delete">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>48</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Удалить</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections/>

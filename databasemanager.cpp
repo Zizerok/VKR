@@ -432,7 +432,12 @@ QSqlDatabase DatabaseManager::database()
 QSqlQuery DatabaseManager::getBusinesses(int ownerId)
 {
     QSqlQuery query(db);
-    query.prepare("SELECT id, name FROM businesses WHERE owner_id = ?");
+    query.prepare(
+        "SELECT id, name, created_at "
+        "FROM businesses "
+        "WHERE owner_id = ? "
+        "ORDER BY created_at DESC, id DESC"
+        );
     query.addBindValue(ownerId);
     query.exec();
     return query;
@@ -445,6 +450,79 @@ bool DatabaseManager::createBusiness(int ownerId, const QString& name)
     query.addBindValue(ownerId);
     query.addBindValue(name);
     return query.exec();
+}
+
+bool DatabaseManager::deleteBusiness(int businessId)
+{
+    if (!db.transaction())
+        qDebug() << "DELETE BUSINESS TRANSACTION START ERROR:" << db.lastError().text();
+
+    auto execDelete = [this](const QString& sql, int idValue, bool bindTwice = false) {
+        QSqlQuery query(db);
+        query.prepare(sql);
+        query.addBindValue(idValue);
+        if (bindTwice)
+            query.addBindValue(idValue);
+        const bool ok = query.exec();
+        if (!ok)
+            qDebug() << "DELETE BUSINESS CASCADE ERROR:" << query.lastError().text() << sql;
+        return ok;
+    };
+
+    if (!execDelete("DELETE FROM activity_logs WHERE business_id = ?", businessId)
+        || !execDelete("DELETE FROM notifications WHERE business_id = ?", businessId)
+        || !execDelete("DELETE FROM shift_responses WHERE business_id = ?", businessId)
+        || !execDelete("DELETE FROM vk_settings WHERE business_id = ?", businessId)
+        || !execDelete(
+               "DELETE FROM shift_template_assignments "
+               "WHERE template_id IN (SELECT id FROM shift_templates WHERE business_id = ?)",
+               businessId)
+        || !execDelete(
+               "DELETE FROM shift_template_open_positions "
+               "WHERE template_id IN (SELECT id FROM shift_templates WHERE business_id = ?)",
+               businessId)
+        || !execDelete("DELETE FROM shift_templates WHERE business_id = ?", businessId)
+        || !execDelete(
+               "DELETE FROM shift_assignments "
+               "WHERE shift_id IN (SELECT id FROM shifts WHERE business_id = ?)",
+               businessId)
+        || !execDelete(
+               "DELETE FROM shift_open_positions "
+               "WHERE shift_id IN (SELECT id FROM shifts WHERE business_id = ?)",
+               businessId)
+        || !execDelete("DELETE FROM shifts WHERE business_id = ?", businessId)
+        || !execDelete(
+               "DELETE FROM position_capabilities "
+               "WHERE position_id IN (SELECT id FROM positions WHERE business_id = ?) "
+               "OR covered_position_id IN (SELECT id FROM positions WHERE business_id = ?)",
+               businessId,
+               true)
+        || !execDelete("DELETE FROM positions WHERE business_id = ?", businessId)
+        || !execDelete("DELETE FROM employees WHERE business_id = ?", businessId))
+    {
+        db.rollback();
+        return false;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("DELETE FROM businesses WHERE id = ?");
+    query.addBindValue(businessId);
+
+    if (!query.exec())
+    {
+        qDebug() << "DELETE BUSINESS ERROR:" << query.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    if (!db.commit())
+    {
+        qDebug() << "DELETE BUSINESS TRANSACTION COMMIT ERROR:" << db.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    return true;
 }
 
 QString DatabaseManager::getBusinessName(int businessId)

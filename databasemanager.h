@@ -129,6 +129,7 @@ public:
     QSqlDatabase database();
     QSqlQuery getBusinesses(int ownerId);
     bool createBusiness(int ownerId, const QString& name);
+    bool deleteBusiness(int businessId);
     QString getBusinessName(int businessId);
     bool addActivityLog(int businessId,
                         const QString& actionType,
