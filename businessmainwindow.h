@@ -77,6 +77,13 @@ private:
     QWidget *statisticsPage = nullptr;
     QDateEdit *statisticsStartDateEdit = nullptr;
     QDateEdit *statisticsEndDateEdit = nullptr;
+    QLabel *statisticsKpiShiftsLabel = nullptr;
+    QLabel *statisticsKpiEmployeesLabel = nullptr;
+    QLabel *statisticsKpiPaymentsLabel = nullptr;
+    QLabel *statisticsKpiVkLabel = nullptr;
+    QLabel *statisticsComparisonLabel = nullptr;
+    QLabel *statisticsProblemsLabel = nullptr;
+    QLabel *statisticsVkEfficiencyLabel = nullptr;
     QLabel *shiftStatisticsSummaryLabel = nullptr;
     QLabel *employeeStatisticsSummaryLabel = nullptr;
     QLabel *paymentStatisticsSummaryLabel = nullptr;

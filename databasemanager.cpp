@@ -200,6 +200,20 @@ void DatabaseManager::createTables()
         );
 
     query.exec(
+        "CREATE TABLE IF NOT EXISTS activity_logs ("
+        "id SERIAL PRIMARY KEY,"
+        "business_id INTEGER NOT NULL,"
+        "action_type TEXT NOT NULL,"
+        "entity_type TEXT NOT NULL,"
+        "entity_id INTEGER,"
+        "related_employee_id INTEGER,"
+        "related_shift_id INTEGER,"
+        "description TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        ")"
+        );
+
+    query.exec(
         "CREATE TABLE IF NOT EXISTS employees ("
         "id SERIAL PRIMARY KEY,"
         "business_id INTEGER NOT NULL,"
@@ -445,6 +459,95 @@ QString DatabaseManager::getBusinessName(int businessId)
     return "";
 }
 
+bool DatabaseManager::addActivityLog(int businessId,
+                                     const QString& actionType,
+                                     const QString& entityType,
+                                     int entityId,
+                                     const QString& description,
+                                     int relatedEmployeeId,
+                                     int relatedShiftId)
+{
+    QSqlQuery query(db);
+    query.prepare(
+        "INSERT INTO activity_logs ("
+        "business_id, action_type, entity_type, entity_id, related_employee_id, related_shift_id, description"
+        ") VALUES ("
+        ":business_id, :action_type, :entity_type, :entity_id, :related_employee_id, :related_shift_id, :description"
+        ")"
+        );
+    query.bindValue(":business_id", businessId);
+    query.bindValue(":action_type", actionType.trimmed());
+    query.bindValue(":entity_type", entityType.trimmed());
+    if (entityId > 0)
+        query.bindValue(":entity_id", entityId);
+    else
+        query.bindValue(":entity_id", QVariant(QVariant::Int));
+    if (relatedEmployeeId > 0)
+        query.bindValue(":related_employee_id", relatedEmployeeId);
+    else
+        query.bindValue(":related_employee_id", QVariant(QVariant::Int));
+    if (relatedShiftId > 0)
+        query.bindValue(":related_shift_id", relatedShiftId);
+    else
+        query.bindValue(":related_shift_id", QVariant(QVariant::Int));
+    query.bindValue(":description", description.trimmed());
+
+    const bool ok = query.exec();
+    if (!ok)
+        qDebug() << "ADD ACTIVITY LOG ERROR:" << query.lastError().text();
+    return ok;
+}
+
+QList<ActivityLogInfo> DatabaseManager::getActivityLogs(int businessId, const QString& entityType)
+{
+    QList<ActivityLogInfo> logs;
+    QSqlQuery query(db);
+
+    if (entityType.trimmed().isEmpty())
+    {
+        query.prepare(
+            "SELECT id, action_type, entity_type, entity_id, related_employee_id, related_shift_id, description, created_at "
+            "FROM activity_logs "
+            "WHERE business_id = :business_id "
+            "ORDER BY created_at DESC, id DESC"
+            );
+        query.bindValue(":business_id", businessId);
+    }
+    else
+    {
+        query.prepare(
+            "SELECT id, action_type, entity_type, entity_id, related_employee_id, related_shift_id, description, created_at "
+            "FROM activity_logs "
+            "WHERE business_id = :business_id AND entity_type = :entity_type "
+            "ORDER BY created_at DESC, id DESC"
+            );
+        query.bindValue(":business_id", businessId);
+        query.bindValue(":entity_type", entityType.trimmed());
+    }
+
+    if (!query.exec())
+    {
+        qDebug() << "GET ACTIVITY LOGS ERROR:" << query.lastError().text();
+        return logs;
+    }
+
+    while (query.next())
+    {
+        ActivityLogInfo item;
+        item.id = query.value("id").toInt();
+        item.actionType = query.value("action_type").toString();
+        item.entityType = query.value("entity_type").toString();
+        item.entityId = query.value("entity_id").toInt();
+        item.relatedEmployeeId = query.value("related_employee_id").toInt();
+        item.relatedShiftId = query.value("related_shift_id").toInt();
+        item.description = query.value("description").toString();
+        item.createdAt = query.value("created_at").toString();
+        logs.append(item);
+    }
+
+    return logs;
+}
+
 QSqlQuery DatabaseManager::getEmployees(int businessId, bool ascending)
 {
     QSqlQuery query(db);
@@ -601,6 +704,8 @@ bool DatabaseManager::createEmployee(int businessId,
     const bool ok = query.exec();
     if (!ok)
         qDebug() << "CREATE EMPLOYEE ERROR:" << query.lastError().text();
+    else
+        addActivityLog(businessId, "create", "employee", 0, QString("Создан сотрудник: %1").arg(fullName));
 
     return ok;
 }
@@ -663,9 +768,18 @@ bool DatabaseManager::updateEmployee(int employeeId,
     query.bindValue(":salary_rate", salaryRate.trimmed());
     query.bindValue(":id", employeeId);
 
+    int businessId = -1;
+    {
+        QSqlQuery employeeQuery = getEmployeeById(employeeId);
+        if (employeeQuery.next())
+            businessId = employeeQuery.value("business_id").toInt();
+    }
+
     const bool ok = query.exec();
     if (!ok)
         qDebug() << "UPDATE EMPLOYEE ERROR:" << query.lastError().text();
+    else if (businessId > 0)
+        addActivityLog(businessId, "update", "employee", employeeId, QString("Изменена карточка сотрудника: %1").arg(fullName), employeeId);
 
     return ok;
 }
@@ -697,7 +811,10 @@ bool DatabaseManager::createPosition(int businessId,
     }
 
     const int positionId = query.value("id").toInt();
-    return updatePosition(positionId, name, salaryText, coveredPositionIds);
+    const bool ok = updatePosition(positionId, name, salaryText, coveredPositionIds);
+    if (ok)
+        addActivityLog(businessId, "create", "position", positionId, QString("Создана должность: %1").arg(name.trimmed()));
+    return ok;
 }
 
 bool DatabaseManager::updatePosition(int positionId,
@@ -705,6 +822,13 @@ bool DatabaseManager::updatePosition(int positionId,
                                      const QString& salaryText,
                                      const QList<int>& coveredPositionIds)
 {
+    int businessId = -1;
+    {
+        QSqlQuery positionQuery = getPositionById(positionId);
+        if (positionQuery.next())
+            businessId = positionQuery.value("business_id").toInt();
+    }
+
     QSqlQuery updateQuery(db);
     updateQuery.prepare(
         "UPDATE positions SET "
@@ -756,11 +880,25 @@ bool DatabaseManager::updatePosition(int positionId,
         }
     }
 
+    if (businessId > 0)
+        addActivityLog(businessId, "update", "position", positionId, QString("Изменена должность: %1").arg(name.trimmed()));
+
     return true;
 }
 
 bool DatabaseManager::deletePosition(int positionId)
 {
+    int businessId = -1;
+    QString positionName;
+    {
+        QSqlQuery positionQuery = getPositionById(positionId);
+        if (positionQuery.next())
+        {
+            businessId = positionQuery.value("business_id").toInt();
+            positionName = positionQuery.value("name").toString();
+        }
+    }
+
     QSqlQuery deleteCapabilities(db);
     deleteCapabilities.prepare(
         "DELETE FROM position_capabilities "
@@ -777,6 +915,8 @@ bool DatabaseManager::deletePosition(int positionId)
     const bool ok = query.exec();
     if (!ok)
         qDebug() << "DELETE POSITION ERROR:" << query.lastError().text();
+    else if (businessId > 0)
+        addActivityLog(businessId, "delete", "position", positionId, QString("Удалена должность: %1").arg(positionName));
 
     return ok;
 }
@@ -885,6 +1025,33 @@ bool DatabaseManager::createShift(int businessId,
         return false;
     }
 
+    addActivityLog(
+        businessId,
+        "create",
+        "shift",
+        shiftId,
+        QString("Создана смена на %1 %2-%3. Назначено: %4, свободных позиций: %5")
+            .arg(shiftDate.toString("dd.MM.yyyy"))
+            .arg(startTime.toString("HH:mm"))
+            .arg(endTime.toString("HH:mm"))
+            .arg(assignedEmployees.size())
+            .arg(openPositions.size()),
+        -1,
+        shiftId);
+
+    for (const ShiftAssignedEmployeeData& assignment : assignedEmployees)
+    {
+        addActivityLog(
+            businessId,
+            "assign",
+            "shift",
+            shiftId,
+            QString("Сотрудник %1 назначен на смену как %2")
+                .arg(assignment.employeeName, assignment.positionName),
+            assignment.employeeId,
+            shiftId);
+    }
+
     return true;
 }
 
@@ -987,6 +1154,13 @@ bool DatabaseManager::updateShift(int shiftId,
                                   const QList<ShiftAssignedEmployeeData>& assignedEmployees,
                                   const QList<ShiftOpenPositionData>& openPositions)
 {
+    QSqlQuery oldShiftQuery = getShiftById(shiftId);
+    int businessId = -1;
+    if (oldShiftQuery.next())
+        businessId = oldShiftQuery.value("business_id").toInt();
+
+    const QList<ShiftAssignedEmployeeData> previousAssignments = getShiftAssignments(shiftId);
+
     if (!db.transaction())
         qDebug() << "UPDATE SHIFT TRANSACTION START ERROR:" << db.lastError().text();
 
@@ -1093,11 +1267,81 @@ bool DatabaseManager::updateShift(int shiftId,
         return false;
     }
 
+    if (businessId > 0)
+    {
+        addActivityLog(
+            businessId,
+            "update",
+            "shift",
+            shiftId,
+            QString("Изменена смена на %1 %2-%3")
+                .arg(shiftDate.toString("dd.MM.yyyy"))
+                .arg(startTime.toString("HH:mm"))
+                .arg(endTime.toString("HH:mm")),
+            -1,
+            shiftId);
+
+        QSet<QString> previousKeys;
+        for (const ShiftAssignedEmployeeData& assignment : previousAssignments)
+            previousKeys.insert(QString("%1|%2").arg(assignment.employeeId).arg(assignment.positionName));
+
+        QSet<QString> newKeys;
+        for (const ShiftAssignedEmployeeData& assignment : assignedEmployees)
+            newKeys.insert(QString("%1|%2").arg(assignment.employeeId).arg(assignment.positionName));
+
+        for (const ShiftAssignedEmployeeData& assignment : assignedEmployees)
+        {
+            const QString key = QString("%1|%2").arg(assignment.employeeId).arg(assignment.positionName);
+            if (!previousKeys.contains(key))
+            {
+                addActivityLog(
+                    businessId,
+                    "assign",
+                    "shift",
+                    shiftId,
+                    QString("Сотрудник %1 назначен на смену как %2")
+                        .arg(assignment.employeeName, assignment.positionName),
+                    assignment.employeeId,
+                    shiftId);
+            }
+        }
+
+        for (const ShiftAssignedEmployeeData& assignment : previousAssignments)
+        {
+            const QString key = QString("%1|%2").arg(assignment.employeeId).arg(assignment.positionName);
+            if (!newKeys.contains(key))
+            {
+                addActivityLog(
+                    businessId,
+                    "unassign",
+                    "shift",
+                    shiftId,
+                    QString("Сотрудник %1 снят со смены (%2)")
+                        .arg(assignment.employeeName, assignment.positionName),
+                    assignment.employeeId,
+                    shiftId);
+            }
+        }
+    }
+
     return true;
 }
 
 bool DatabaseManager::deleteShift(int shiftId)
 {
+    QSqlQuery shiftQuery = getShiftById(shiftId);
+    int businessId = -1;
+    QString shiftDate;
+    QString startTime;
+    QString endTime;
+    if (shiftQuery.next())
+    {
+        businessId = shiftQuery.value("business_id").toInt();
+        shiftDate = shiftQuery.value("shift_date").toString();
+        startTime = shiftQuery.value("start_time").toString();
+        endTime = shiftQuery.value("end_time").toString();
+    }
+
     if (!db.transaction())
         qDebug() << "DELETE SHIFT TRANSACTION START ERROR:" << db.lastError().text();
 
@@ -1136,6 +1380,21 @@ bool DatabaseManager::deleteShift(int shiftId)
         qDebug() << "DELETE SHIFT TRANSACTION COMMIT ERROR:" << db.lastError().text();
         db.rollback();
         return false;
+    }
+
+    if (businessId > 0)
+    {
+        addActivityLog(
+            businessId,
+            "delete",
+            "shift",
+            shiftId,
+            QString("Удалена смена на %1 %2-%3")
+                .arg(QDate::fromString(shiftDate, Qt::ISODate).toString("dd.MM.yyyy"))
+                .arg(startTime)
+                .arg(endTime),
+            -1,
+            shiftId);
     }
 
     return true;
@@ -1390,6 +1649,13 @@ bool DatabaseManager::createShiftTemplateFromShift(int businessId, int shiftId, 
         return false;
     }
 
+    addActivityLog(
+        businessId,
+        "create",
+        "template",
+        templateId,
+        QString("Создан шаблон смен: %1").arg(name.trimmed()));
+
     return true;
 }
 
@@ -1454,6 +1720,7 @@ bool DatabaseManager::applyShiftTemplate(int templateId, const QList<QDate>& dat
     const QTime endTime = QTime::fromString(templateQuery.value("end_time").toString(), "HH:mm");
     const QString status = templateQuery.value("status").toString();
     const QString comment = templateQuery.value("comment").toString();
+    const QString templateName = templateQuery.value("name").toString();
     const QList<ShiftAssignedEmployeeData> assignments = getShiftTemplateAssignments(templateId);
     const QList<ShiftOpenPositionData> openPositions = getShiftTemplateOpenPositions(templateId);
 
@@ -1489,6 +1756,16 @@ bool DatabaseManager::applyShiftTemplate(int templateId, const QList<QDate>& dat
                 ++(*createdCount);
         }
     }
+
+    addActivityLog(
+        businessId,
+        "apply",
+        "template",
+        templateId,
+        QString("Применён шаблон смен \"%1\": создано %2, пропущено %3")
+            .arg(templateName)
+            .arg(createdCount ? *createdCount : 0)
+            .arg(skippedCount ? *skippedCount : 0));
 
     return true;
 }
@@ -1640,27 +1917,105 @@ QList<ShiftPaymentInfo> DatabaseManager::getEmployeeShiftPayments(int businessId
 
 bool DatabaseManager::updateShiftAssignmentRevenue(int assignmentId, const QString& revenueAmount)
 {
+    int businessId = -1;
+    int shiftId = -1;
+    int employeeId = -1;
+    QString employeeName;
+    QSqlQuery infoQuery(db);
+    infoQuery.prepare(
+        "SELECT s.business_id, s.id AS shift_id, e.id AS employee_id, e.full_name "
+        "FROM shift_assignments sa "
+        "JOIN shifts s ON s.id = sa.shift_id "
+        "JOIN employees e ON e.id = sa.employee_id "
+        "WHERE sa.id = ?"
+        );
+    infoQuery.addBindValue(assignmentId);
+    if (infoQuery.exec() && infoQuery.next())
+    {
+        businessId = infoQuery.value("business_id").toInt();
+        shiftId = infoQuery.value("shift_id").toInt();
+        employeeId = infoQuery.value("employee_id").toInt();
+        employeeName = infoQuery.value("full_name").toString();
+    }
+
     QSqlQuery query(db);
     query.prepare(
         "UPDATE shift_assignments SET revenue_amount = ? WHERE id = ?"
         );
     query.addBindValue(revenueAmount.trimmed());
     query.addBindValue(assignmentId);
-    return query.exec();
+    const bool ok = query.exec();
+    if (ok && businessId > 0)
+    {
+        addActivityLog(
+            businessId,
+            "update",
+            "payment",
+            assignmentId,
+            QString("Обновлена выручка для выплаты сотрудника %1: %2")
+                .arg(employeeName)
+                .arg(revenueAmount.trimmed().isEmpty() ? "-" : revenueAmount.trimmed()),
+            employeeId,
+            shiftId);
+    }
+    return ok;
 }
 
 bool DatabaseManager::markShiftAssignmentPaid(int assignmentId)
 {
+    int businessId = -1;
+    int shiftId = -1;
+    int employeeId = -1;
+    QString employeeName;
+    QSqlQuery infoQuery(db);
+    infoQuery.prepare(
+        "SELECT s.business_id, s.id AS shift_id, e.id AS employee_id, e.full_name "
+        "FROM shift_assignments sa "
+        "JOIN shifts s ON s.id = sa.shift_id "
+        "JOIN employees e ON e.id = sa.employee_id "
+        "WHERE sa.id = ?"
+        );
+    infoQuery.addBindValue(assignmentId);
+    if (infoQuery.exec() && infoQuery.next())
+    {
+        businessId = infoQuery.value("business_id").toInt();
+        shiftId = infoQuery.value("shift_id").toInt();
+        employeeId = infoQuery.value("employee_id").toInt();
+        employeeName = infoQuery.value("full_name").toString();
+    }
+
     QSqlQuery query(db);
     query.prepare(
         "UPDATE shift_assignments SET is_paid = 1, paid_at = CURRENT_TIMESTAMP WHERE id = ?"
         );
     query.addBindValue(assignmentId);
-    return query.exec();
+    const bool ok = query.exec();
+    if (ok && businessId > 0)
+    {
+        addActivityLog(
+            businessId,
+            "create",
+            "payment",
+            assignmentId,
+            QString("Создана выплата сотруднику %1")
+                .arg(employeeName),
+            employeeId,
+            shiftId);
+    }
+    return ok;
 }
 
 bool DatabaseManager::markAllEmployeeAssignmentsPaid(int businessId, int employeeId)
 {
+    QString employeeName;
+    {
+        QSqlQuery queryEmployee(db);
+        queryEmployee.prepare("SELECT full_name FROM employees WHERE id = ?");
+        queryEmployee.addBindValue(employeeId);
+        if (queryEmployee.exec() && queryEmployee.next())
+            employeeName = queryEmployee.value(0).toString();
+    }
+
     QSqlQuery query(db);
     query.prepare(
         "UPDATE shift_assignments "
@@ -1671,7 +2026,19 @@ bool DatabaseManager::markAllEmployeeAssignmentsPaid(int businessId, int employe
         );
     query.bindValue(":employee_id", employeeId);
     query.bindValue(":business_id", businessId);
-    return query.exec();
+    const bool ok = query.exec();
+    if (ok)
+    {
+        addActivityLog(
+            businessId,
+            "create",
+            "payment",
+            employeeId,
+            QString("Отмечены как выплаченные все доступные выплаты сотрудника %1")
+                .arg(employeeName.isEmpty() ? QString("ID %1").arg(employeeId) : employeeName),
+            employeeId);
+    }
+    return ok;
 }
 
 bool DatabaseManager::createNotification(int businessId,
@@ -1706,6 +2073,16 @@ bool DatabaseManager::createNotification(int businessId,
     const bool ok = query.exec();
     if (!ok)
         qDebug() << "CREATE NOTIFICATION ERROR:" << query.lastError().text();
+    else
+        addActivityLog(
+            businessId,
+            "send",
+            "notification",
+            0,
+            QString("Отправлено уведомление \"%1\" для \"%2\"")
+                .arg(notificationType.trimmed(), recipientLabel.trimmed().isEmpty() ? QString("без получателя") : recipientLabel.trimmed()),
+            -1,
+            shiftId);
     return ok;
 }
 

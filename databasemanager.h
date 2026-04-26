@@ -93,6 +93,18 @@ struct ShiftTemplateInfo
     QString createdAt;
 };
 
+struct ActivityLogInfo
+{
+    int id = -1;
+    QString actionType;
+    QString entityType;
+    int entityId = -1;
+    int relatedEmployeeId = -1;
+    int relatedShiftId = -1;
+    QString description;
+    QString createdAt;
+};
+
 struct VkSettingsData
 {
     QString groupId;
@@ -118,6 +130,14 @@ public:
     QSqlQuery getBusinesses(int ownerId);
     bool createBusiness(int ownerId, const QString& name);
     QString getBusinessName(int businessId);
+    bool addActivityLog(int businessId,
+                        const QString& actionType,
+                        const QString& entityType,
+                        int entityId,
+                        const QString& description,
+                        int relatedEmployeeId = -1,
+                        int relatedShiftId = -1);
+    QList<ActivityLogInfo> getActivityLogs(int businessId, const QString& entityType = QString());
     QSqlQuery getEmployees(int businessId, bool ascending = true);
     QSqlQuery getEmployeeById(int employeeId);
     QSqlQuery getPositions(int businessId, bool ascending = true);

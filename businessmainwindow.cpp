@@ -1,6 +1,7 @@
 ﻿#include "businessmainwindow.h"
 #include "ui_businessmainwindow.h"
 
+#include "activitylogdialog.h"
 #include "addemployeedialog.h"
 #include "addshiftdialog.h"
 #include "businesslist.h"
@@ -1049,6 +1050,50 @@ void BusinessMainWindow::setupStatisticsSection()
     filterLayout->addWidget(refreshButton);
     filterLayout->addStretch();
 
+    auto createKpiCard = [container](const QString& title, QLabel *&valueLabel) {
+        auto *frame = new QFrame(container);
+        frame->setFrameShape(QFrame::StyledPanel);
+        auto *layout = new QVBoxLayout(frame);
+        layout->setSpacing(6);
+        auto *titleLabel = new QLabel(title, frame);
+        QFont titleFont = titleLabel->font();
+        titleFont.setBold(true);
+        titleLabel->setFont(titleFont);
+        valueLabel = new QLabel("-", frame);
+        QFont valueFont = valueLabel->font();
+        valueFont.setPointSize(valueFont.pointSize() + 3);
+        valueFont.setBold(true);
+        valueLabel->setFont(valueFont);
+        valueLabel->setWordWrap(true);
+        layout->addWidget(titleLabel);
+        layout->addWidget(valueLabel);
+        layout->addStretch();
+        return frame;
+    };
+
+    auto *kpiLayout = new QHBoxLayout();
+    kpiLayout->setSpacing(12);
+    kpiLayout->addWidget(createKpiCard("Смен за период", statisticsKpiShiftsLabel), 1);
+    kpiLayout->addWidget(createKpiCard("Активных сотрудников", statisticsKpiEmployeesLabel), 1);
+    kpiLayout->addWidget(createKpiCard("Начислено выплат", statisticsKpiPaymentsLabel), 1);
+    kpiLayout->addWidget(createKpiCard("VK-отклики", statisticsKpiVkLabel), 1);
+
+    auto createInfoBlock = [container](const QString& title, QLabel *&contentLabel) {
+        auto *group = new QGroupBox(title, container);
+        auto *layout = new QVBoxLayout(group);
+        contentLabel = new QLabel("-", group);
+        contentLabel->setWordWrap(true);
+        contentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        layout->addWidget(contentLabel);
+        return group;
+    };
+
+    auto *insightsLayout = new QHBoxLayout();
+    insightsLayout->setSpacing(12);
+    insightsLayout->addWidget(createInfoBlock("Сравнение с прошлым периодом", statisticsComparisonLabel), 1);
+    insightsLayout->addWidget(createInfoBlock("Проблемные места", statisticsProblemsLabel), 1);
+    insightsLayout->addWidget(createInfoBlock("Эффективность VK-откликов", statisticsVkEfficiencyLabel), 1);
+
     auto createBlock = [container](const QString& title,
                                    QLabel *&summaryLabel,
                                    StatisticsChartWidget *&firstChartView,
@@ -1071,6 +1116,8 @@ void BusinessMainWindow::setupStatisticsSection()
     };
 
     containerLayout->addWidget(filterFrame);
+    containerLayout->addLayout(kpiLayout);
+    containerLayout->addLayout(insightsLayout);
     containerLayout->addWidget(createBlock("Статистика по сменам",
                                            shiftStatisticsSummaryLabel,
                                            shiftStatusChartView,
@@ -1097,6 +1144,13 @@ void BusinessMainWindow::loadStatisticsSection()
     if (currentBusinessId < 0
         || !statisticsStartDateEdit
         || !statisticsEndDateEdit
+        || !statisticsKpiShiftsLabel
+        || !statisticsKpiEmployeesLabel
+        || !statisticsKpiPaymentsLabel
+        || !statisticsKpiVkLabel
+        || !statisticsComparisonLabel
+        || !statisticsProblemsLabel
+        || !statisticsVkEfficiencyLabel
         || !shiftStatusChartView
         || !shiftPositionsChartView
         || !employeePositionsChartView
@@ -1115,11 +1169,69 @@ void BusinessMainWindow::loadStatisticsSection()
         return;
     }
 
+    auto formatSignedPercent = [](double current, double previous) {
+        if (qFuzzyCompare(previous + 1.0, 1.0))
+        {
+            if (qFuzzyCompare(current + 1.0, 1.0))
+                return QString("0%");
+            return QString("+100%");
+        }
+
+        const double percent = ((current - previous) / previous) * 100.0;
+        return QString("%1%2%")
+            .arg(percent >= 0.0 ? "+" : "")
+            .arg(QString::number(percent, 'f', 1));
+    };
+
+    auto topFromIntMap = [](const QMap<QString, int>& map, int limit) {
+        QList<QPair<QString, int>> items;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+            items.append(qMakePair(it.key().trimmed().isEmpty() ? QString("Без должности") : it.key(), it.value()));
+        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+            if (left.second == right.second)
+                return left.first < right.first;
+            return left.second > right.second;
+        });
+        if (items.size() > limit)
+            items = items.mid(0, limit);
+        return items;
+    };
+
+    auto topFromEmployeeIntMap = [](const QMap<int, int>& map, const QMap<int, QString>& employeeNames, int limit) {
+        QList<QPair<QString, int>> items;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+            items.append(qMakePair(employeeNames.value(it.key(), QString("Сотрудник %1").arg(it.key())), it.value()));
+        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+            if (left.second == right.second)
+                return left.first < right.first;
+            return left.second > right.second;
+        });
+        if (items.size() > limit)
+            items = items.mid(0, limit);
+        return items;
+    };
+
+    auto topFromEmployeeDoubleMap = [](const QMap<int, double>& map, const QMap<int, QString>& employeeNames, int limit) {
+        QList<QPair<QString, double>> items;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+            items.append(qMakePair(employeeNames.value(it.key(), QString("Сотрудник %1").arg(it.key())), it.value()));
+        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+            if (qFuzzyCompare(left.second + 1.0, right.second + 1.0))
+                return left.first < right.first;
+            return left.second > right.second;
+        });
+        if (items.size() > limit)
+            items = items.mid(0, limit);
+        return items;
+    };
+
     int totalShifts = 0;
     int completedShifts = 0;
     int cancelledShifts = 0;
     int unfilledShifts = 0;
     QMap<QString, int> shiftPositionCounts;
+    QMap<QString, int> openPositionsByName;
+    QMap<int, int> openPositionsByShift;
     QSet<int> shiftsWithOpenPositions;
     QSet<int> uniqueShiftIds;
 
@@ -1145,7 +1257,11 @@ void BusinessMainWindow::loadStatisticsSection()
         {
             shiftPositionCounts[openPosition.positionName] += openPosition.employeeCount;
             if (openPosition.employeeCount > 0)
+            {
                 shiftsWithOpenPositions.insert(shiftId);
+                openPositionsByName[openPosition.positionName] += openPosition.employeeCount;
+                openPositionsByShift[shiftId] += openPosition.employeeCount;
+            }
         }
     }
     unfilledShifts = shiftsWithOpenPositions.size();
@@ -1165,6 +1281,10 @@ void BusinessMainWindow::loadStatisticsSection()
     QMap<int, QString> employeeNames;
     QMap<int, double> paymentTotalsByEmployee;
     QMap<int, int> responseCountsByEmployee;
+    int totalResponses = 0;
+    int acceptedResponses = 0;
+    int declinedResponses = 0;
+    QSet<int> vkRespondedShiftIds;
     double totalAccrued = 0.0;
     double totalPaid = 0.0;
 
@@ -1209,9 +1329,7 @@ void BusinessMainWindow::loadStatisticsSection()
         const double amount = calculatePaymentAmount(payment);
         totalAccrued += amount;
         if (payment.isPaid)
-        {
             totalPaid += amount;
-        }
 
         shiftsPerEmployee[payment.employeeId] += 1;
         employeeNames[payment.employeeId] = payment.employeeName;
@@ -1235,53 +1353,38 @@ void BusinessMainWindow::loadStatisticsSection()
     while (responsesQuery.next())
         responseCountsByEmployee[responsesQuery.value("employee_id").toInt()] = responsesQuery.value("response_count").toInt();
 
-    auto topFromIntMap = [](const QMap<QString, int>& map, int limit) {
-        QList<QPair<QString, int>> items;
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
-            items.append(qMakePair(it.key().trimmed().isEmpty() ? QString("Без должности") : it.key(), it.value()));
-        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
-            if (left.second == right.second)
-                return left.first < right.first;
-            return left.second > right.second;
-        });
-        if (items.size() > limit)
-            items = items.mid(0, limit);
-        return items;
-    };
+    QSqlQuery responseStatusQuery(DatabaseManager::instance().database());
+    responseStatusQuery.prepare(
+        "SELECT shift_id, response_status "
+        "FROM shift_responses "
+        "WHERE business_id = :business_id "
+        "AND created_at::date >= :start_date "
+        "AND created_at::date <= :end_date");
+    responseStatusQuery.bindValue(":business_id", currentBusinessId);
+    responseStatusQuery.bindValue(":start_date", startDate.toString(Qt::ISODate));
+    responseStatusQuery.bindValue(":end_date", endDate.toString(Qt::ISODate));
+    responseStatusQuery.exec();
 
-    auto topFromEmployeeIntMap = [&employeeNames](const QMap<int, int>& map, int limit) {
-        QList<QPair<QString, int>> items;
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
-            items.append(qMakePair(employeeNames.value(it.key(), QString("Сотрудник %1").arg(it.key())), it.value()));
-        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
-            if (left.second == right.second)
-                return left.first < right.first;
-            return left.second > right.second;
-        });
-        if (items.size() > limit)
-            items = items.mid(0, limit);
-        return items;
-    };
+    while (responseStatusQuery.next())
+    {
+        ++totalResponses;
+        const int shiftId = responseStatusQuery.value("shift_id").toInt();
+        const QString status = responseStatusQuery.value("response_status").toString().trimmed().toLower();
+        if (shiftId > 0)
+            vkRespondedShiftIds.insert(shiftId);
 
-    auto topFromEmployeeDoubleMap = [&employeeNames](const QMap<int, double>& map, int limit) {
-        QList<QPair<QString, double>> items;
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
-            items.append(qMakePair(employeeNames.value(it.key(), QString("Сотрудник %1").arg(it.key())), it.value()));
-        std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
-            if (qFuzzyCompare(left.second + 1.0, right.second + 1.0))
-                return left.first < right.first;
-            return left.second > right.second;
-        });
-        if (items.size() > limit)
-            items = items.mid(0, limit);
-        return items;
-    };
+        if (status.contains("зан") || status.contains("accepted") || status.contains("назнач"))
+            ++acceptedResponses;
+        else if (status.contains("отмен") || status.contains("cancel") || status.contains("declin"))
+            ++declinedResponses;
+    }
 
     const QList<QPair<QString, int>> topPositions = topFromIntMap(shiftPositionCounts, 6);
     const QList<QPair<QString, int>> positionDistribution = topFromIntMap(employeesByPosition, 6);
-    const QList<QPair<QString, int>> topEmployeesByShifts = topFromEmployeeIntMap(shiftsPerEmployee, 6);
-    const QList<QPair<QString, int>> topResponders = topFromEmployeeIntMap(responseCountsByEmployee, 3);
-    const QList<QPair<QString, double>> topEmployeesByPayments = topFromEmployeeDoubleMap(paymentTotalsByEmployee, 6);
+    const QList<QPair<QString, int>> topEmployeesByShifts = topFromEmployeeIntMap(shiftsPerEmployee, employeeNames, 6);
+    const QList<QPair<QString, int>> topResponders = topFromEmployeeIntMap(responseCountsByEmployee, employeeNames, 3);
+    const QList<QPair<QString, double>> topEmployeesByPayments = topFromEmployeeDoubleMap(paymentTotalsByEmployee, employeeNames, 6);
+    const QList<QPair<QString, int>> topOpenPositions = topFromIntMap(openPositionsByName, 3);
 
     QString respondersText = "Нет откликов через VK";
     if (!topResponders.isEmpty())
@@ -1291,6 +1394,164 @@ void BusinessMainWindow::loadStatisticsSection()
             responderLines << QString("%1 (%2)").arg(responder.first).arg(responder.second);
         respondersText = responderLines.join(", ");
     }
+
+    const QDate previousEndDate = startDate.addDays(-1);
+    const int periodDays = startDate.daysTo(endDate) + 1;
+    const QDate previousStartDate = previousEndDate.addDays(-(periodDays - 1));
+
+    int previousTotalShifts = 0;
+    int previousActiveEmployees = 0;
+    double previousTotalAccrued = 0.0;
+    int previousResponses = 0;
+
+    if (previousStartDate.isValid() && previousEndDate.isValid())
+    {
+        QSqlQuery previousShiftsQuery = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, previousStartDate, previousEndDate);
+        while (previousShiftsQuery.next())
+            ++previousTotalShifts;
+
+        QSqlQuery previousEmployeesQuery = DatabaseManager::instance().getEmployees(currentBusinessId, true);
+        while (previousEmployeesQuery.next())
+        {
+            if (previousEmployeesQuery.value("is_active").toInt() == 1)
+                ++previousActiveEmployees;
+        }
+
+        QSqlQuery previousAssignmentsQuery(DatabaseManager::instance().database());
+        previousAssignmentsQuery.prepare(
+            "SELECT sa.id, sa.employee_id, e.full_name, s.id AS shift_id, s.shift_date, s.start_time, s.end_time, "
+            "sa.position_name, sa.payment_type, sa.hourly_rate, sa.fixed_rate, sa.percent_rate, "
+            "COALESCE(sa.revenue_amount, '') AS revenue_amount, COALESCE(sa.paid_at, '') AS paid_at, "
+            "COALESCE(sa.is_paid, 0) AS is_paid "
+            "FROM shift_assignments sa "
+            "JOIN shifts s ON s.id = sa.shift_id "
+            "JOIN employees e ON e.id = sa.employee_id "
+            "WHERE s.business_id = :business_id "
+            "AND s.shift_date >= :start_date "
+            "AND s.shift_date <= :end_date");
+        previousAssignmentsQuery.bindValue(":business_id", currentBusinessId);
+        previousAssignmentsQuery.bindValue(":start_date", previousStartDate.toString(Qt::ISODate));
+        previousAssignmentsQuery.bindValue(":end_date", previousEndDate.toString(Qt::ISODate));
+        previousAssignmentsQuery.exec();
+
+        while (previousAssignmentsQuery.next())
+        {
+            ShiftPaymentInfo payment;
+            payment.assignmentId = previousAssignmentsQuery.value("id").toInt();
+            payment.shiftId = previousAssignmentsQuery.value("shift_id").toInt();
+            payment.employeeId = previousAssignmentsQuery.value("employee_id").toInt();
+            payment.employeeName = previousAssignmentsQuery.value("full_name").toString();
+            payment.shiftDate = previousAssignmentsQuery.value("shift_date").toString();
+            payment.timeRange = QString("%1 - %2")
+                                    .arg(previousAssignmentsQuery.value("start_time").toString(),
+                                         previousAssignmentsQuery.value("end_time").toString());
+            payment.positionName = previousAssignmentsQuery.value("position_name").toString();
+            payment.paymentType = previousAssignmentsQuery.value("payment_type").toString();
+            payment.hourlyRate = previousAssignmentsQuery.value("hourly_rate").toString();
+            payment.fixedRate = previousAssignmentsQuery.value("fixed_rate").toString();
+            payment.percentRate = previousAssignmentsQuery.value("percent_rate").toString();
+            payment.revenueAmount = previousAssignmentsQuery.value("revenue_amount").toString();
+            payment.paidAt = previousAssignmentsQuery.value("paid_at").toString();
+            payment.isPaid = previousAssignmentsQuery.value("is_paid").toInt() == 1;
+            previousTotalAccrued += calculatePaymentAmount(payment);
+        }
+
+        QSqlQuery previousResponsesQuery(DatabaseManager::instance().database());
+        previousResponsesQuery.prepare(
+            "SELECT COUNT(*) AS response_count "
+            "FROM shift_responses "
+            "WHERE business_id = :business_id "
+            "AND created_at::date >= :start_date "
+            "AND created_at::date <= :end_date");
+        previousResponsesQuery.bindValue(":business_id", currentBusinessId);
+        previousResponsesQuery.bindValue(":start_date", previousStartDate.toString(Qt::ISODate));
+        previousResponsesQuery.bindValue(":end_date", previousEndDate.toString(Qt::ISODate));
+        previousResponsesQuery.exec();
+        if (previousResponsesQuery.next())
+            previousResponses = previousResponsesQuery.value("response_count").toInt();
+    }
+
+    statisticsKpiShiftsLabel->setText(
+        QString("%1\n%2 к прошлому периоду")
+            .arg(totalShifts)
+            .arg(formatSignedPercent(totalShifts, previousTotalShifts)));
+    statisticsKpiEmployeesLabel->setText(
+        QString("%1\n%2 к прошлому периоду")
+            .arg(activeEmployees)
+            .arg(formatSignedPercent(activeEmployees, previousActiveEmployees)));
+    statisticsKpiPaymentsLabel->setText(
+        QString("%1\n%2 к прошлому периоду")
+            .arg(QString::number(totalAccrued, 'f', 0))
+            .arg(formatSignedPercent(totalAccrued, previousTotalAccrued)));
+    statisticsKpiVkLabel->setText(
+        QString("%1\n%2 к прошлому периоду")
+            .arg(totalResponses)
+            .arg(formatSignedPercent(totalResponses, previousResponses)));
+
+    statisticsComparisonLabel->setText(
+        QString("Прошлый период: %1 - %2\n"
+                "Смен: %3 -> %4 (%5)\n"
+                "Начисления: %6 -> %7 (%8)\n"
+                "VK-отклики: %9 -> %10 (%11)")
+            .arg(previousStartDate.toString("dd.MM.yyyy"))
+            .arg(previousEndDate.toString("dd.MM.yyyy"))
+            .arg(previousTotalShifts)
+            .arg(totalShifts)
+            .arg(formatSignedPercent(totalShifts, previousTotalShifts))
+            .arg(QString::number(previousTotalAccrued, 'f', 0))
+            .arg(QString::number(totalAccrued, 'f', 0))
+            .arg(formatSignedPercent(totalAccrued, previousTotalAccrued))
+            .arg(previousResponses)
+            .arg(totalResponses)
+            .arg(formatSignedPercent(totalResponses, previousResponses)));
+
+    QStringList problemLines;
+    if (unfilledShifts > 0)
+        problemLines << QString("Неукомплектованных смен: %1").arg(unfilledShifts);
+    if (!topOpenPositions.isEmpty())
+    {
+        problemLines << "Самые дефицитные должности:";
+        for (const auto& item : topOpenPositions)
+            problemLines << QString("%1 — %2 своб. мест").arg(item.first).arg(item.second);
+    }
+    if (!topEmployeesByShifts.isEmpty())
+    {
+        problemLines << "Сотрудники с наибольшей нагрузкой:";
+        const int overloadLimit = (topEmployeesByShifts.size() < 3)
+            ? static_cast<int>(topEmployeesByShifts.size())
+            : 3;
+        for (int index = 0; index < overloadLimit; ++index)
+            problemLines << QString("%1 — %2 смен").arg(topEmployeesByShifts.at(index).first).arg(topEmployeesByShifts.at(index).second);
+    }
+    if (problemLines.isEmpty())
+        problemLines << "Явных проблем за выбранный период не обнаружено.";
+    statisticsProblemsLabel->setText(problemLines.join("\n"));
+
+    int respondedProblemShifts = 0;
+    for (auto it = openPositionsByShift.constBegin(); it != openPositionsByShift.constEnd(); ++it)
+    {
+        if (vkRespondedShiftIds.contains(it.key()))
+            ++respondedProblemShifts;
+    }
+
+    const int shiftsWithDemand = openPositionsByShift.size();
+    const double responsePerOpenShift = shiftsWithDemand == 0 ? 0.0 : static_cast<double>(totalResponses) / shiftsWithDemand;
+    const double closureRate = shiftsWithDemand == 0 ? 0.0 : (static_cast<double>(respondedProblemShifts) / shiftsWithDemand) * 100.0;
+    const double acceptedRate = totalResponses == 0 ? 0.0 : (static_cast<double>(acceptedResponses) / totalResponses) * 100.0;
+
+    statisticsVkEfficiencyLabel->setText(
+        QString("Всего откликов: %1\n"
+                "Подтверждено системой: %2\n"
+                "Отмен/отказов: %3\n"
+                "Среднее откликов на смену с набором: %4\n"
+                "Проблемных смен с откликами: %5%\n"
+                "Доля успешных откликов: %6%")
+            .arg(totalResponses)
+            .arg(acceptedResponses)
+            .arg(declinedResponses)
+            .arg(QString::number(responsePerOpenShift, 'f', 1))
+            .arg(QString::number(closureRate, 'f', 1))
+            .arg(QString::number(acceptedRate, 'f', 1)));
 
     shiftStatisticsSummaryLabel->setText(
         QString("Смен создано: %1\nВыполнено: %2\nОтменено: %3\nНеукомплектовано: %4")
@@ -1423,8 +1684,10 @@ void BusinessMainWindow::setupSettingsSection()
         auto *buttonsLayout = new QHBoxLayout();
         auto *saveSettingsButton = new QPushButton(QString::fromUtf8("Сохранить настройки"), settingsFrame);
         auto *checkConnectionButton = new QPushButton(QString::fromUtf8("Проверить backend"), settingsFrame);
+        auto *activityLogButton = new QPushButton(QString::fromUtf8("Журнал действий"), settingsFrame);
         buttonsLayout->addWidget(saveSettingsButton);
         buttonsLayout->addWidget(checkConnectionButton);
+        buttonsLayout->addWidget(activityLogButton);
         buttonsLayout->addStretch();
 
         auto *accountActionsLayout = new QHBoxLayout();
@@ -1451,6 +1714,10 @@ void BusinessMainWindow::setupSettingsSection()
 
         connect(saveSettingsButton, &QPushButton::clicked, this, &BusinessMainWindow::onSaveVkSettingsClicked);
         connect(checkConnectionButton, &QPushButton::clicked, this, &BusinessMainWindow::onCheckVkConnectionClicked);
+        connect(activityLogButton, &QPushButton::clicked, this, [this]() {
+            ActivityLogDialog dialog(currentBusinessId, this);
+            dialog.exec();
+        });
         connect(backToBusinessesButton, &QPushButton::clicked, this, [this]() {
             auto *businessList = new BusinessList(currentUserId);
             businessList->setAttribute(Qt::WA_DeleteOnClose);

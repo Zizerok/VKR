@@ -370,6 +370,45 @@ def get_employee_id_by_vk_id(connection, business_id: int, vk_id: int) -> int | 
     return row["id"] if row else None
 
 
+def get_employee_name_by_id(connection, employee_id: int | None) -> str:
+    if not employee_id:
+        return ""
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT full_name FROM employees WHERE id = %s LIMIT 1", (employee_id,))
+        row = cursor.fetchone()
+    return row["full_name"] if row else ""
+
+
+def add_activity_log(
+    connection,
+    business_id: int,
+    action_type: str,
+    entity_type: str,
+    entity_id: int | None,
+    description: str,
+    related_employee_id: int | None = None,
+    related_shift_id: int | None = None,
+) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO activity_logs (
+                business_id, action_type, entity_type, entity_id,
+                related_employee_id, related_shift_id, description
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                business_id,
+                action_type,
+                entity_type,
+                entity_id,
+                related_employee_id,
+                related_shift_id,
+                description,
+            ),
+        )
+
+
 def employee_can_work_position(connection, business_id: int, employee_id: int, position_name: str) -> bool:
     with connection.cursor() as cursor:
         cursor.execute(
@@ -520,6 +559,7 @@ def save_shift_response(vk_id: int, payload: dict[str, Any], raw_payload: dict[s
             raise HTTPException(status_code=404, detail=f"Shift {shift_id} was not found")
 
         employee_id = get_employee_id_by_vk_id(connection, business_id, vk_id)
+        employee_name = get_employee_name_by_id(connection, employee_id)
         position_name = payload.get("position", "")
         response_status, response_message = occupy_open_position(
             connection,
@@ -549,6 +589,17 @@ def save_shift_response(vk_id: int, payload: dict[str, Any], raw_payload: dict[s
                 ),
             )
 
+        add_activity_log(
+            connection,
+            business_id,
+            "vk_response",
+            "vk",
+            shift_id,
+            f"Получен отклик из VK: {employee_name or f'VK {vk_id}'} на позицию {position_name}",
+            employee_id,
+            shift_id,
+        )
+
     return response_status, response_message
 
 
@@ -560,6 +611,7 @@ def save_shift_cancellation(vk_id: int, payload: dict[str, Any], raw_payload: di
             raise HTTPException(status_code=404, detail=f"Shift {shift_id} was not found")
 
         employee_id = get_employee_id_by_vk_id(connection, business_id, vk_id)
+        employee_name = get_employee_name_by_id(connection, employee_id)
         position_name = payload.get("position", "")
         response_status, response_message = cancel_assigned_shift(
             connection,
@@ -588,6 +640,17 @@ def save_shift_cancellation(vk_id: int, payload: dict[str, Any], raw_payload: di
                     json.dumps(raw_payload, ensure_ascii=False),
                 ),
             )
+
+        add_activity_log(
+            connection,
+            business_id,
+            "vk_cancel",
+            "vk",
+            shift_id,
+            f"Сотрудник отменил смену через VK: {employee_name or f'VK {vk_id}'} ({position_name})",
+            employee_id,
+            shift_id,
+        )
 
     return response_status, response_message
 

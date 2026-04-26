@@ -11,6 +11,7 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    activitylogdialog.cpp \
     addemployeedialog.cpp \
     addshiftdialog.cpp \
     businesslist.cpp \
@@ -27,6 +28,7 @@ SOURCES += \
     statisticschartwidget.cpp
 
 HEADERS += \
+    activitylogdialog.h \
     addemployeedialog.h \
     addshiftdialog.h \
     businesslist.h \
