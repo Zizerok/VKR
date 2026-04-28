@@ -12,6 +12,7 @@
 #include "statisticschartwidget.h"
 
 #include <QColor>
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -318,7 +319,8 @@ void BusinessMainWindow::applyWindowStyles()
         ui->contentLayout->insertWidget(1, sectionSubtitleLabel);
     }
 
-    setStyleSheet(R"(
+    const QString chevronPath = findAssetPath("chevron-down.svg").replace("\\", "/");
+    setStyleSheet(QString(R"(
         QMainWindow, QWidget#centralwidget {
             background: #F6F6F6;
         }
@@ -478,6 +480,34 @@ void BusinessMainWindow::applyWindowStyles()
             border: 1px solid #ECECF2;
             border-radius: 20px;
         }
+        QFrame#paymentsLeftCard,
+        QFrame#paymentsRightCard,
+        QFrame#communicationFormCard,
+        QFrame#communicationHistoryCard,
+        QFrame#communicationResponsesCard,
+        QFrame#statisticsFilterCard,
+        QFrame#settingsMainCard,
+        QFrame#settingsBotCard {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 22px;
+        }
+        QLabel#sectionTitleLabel {
+            color: #1C1D21;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        QLabel#paymentsSummaryLabel {
+            color: #8181A5;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        QLabel#sectionInfoLabel,
+        QLabel#settingsDescriptionLabel,
+        QLabel#vkConnectionStatusLabel {
+            color: #8181A5;
+            font-size: 13px;
+        }
         QLabel#shiftKpiTitleLabel {
             color: #8181A5;
             font-size: 12px;
@@ -556,6 +586,20 @@ void BusinessMainWindow::applyWindowStyles()
             color: #8181A5;
             font-weight: 600;
         }
+        QToolButton#staffSortButton {
+            min-width: 38px;
+            max-width: 38px;
+            min-height: 38px;
+            max-height: 38px;
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 12px;
+            padding: 0;
+        }
+        QToolButton#staffSortButton:hover {
+            background: #F8FAFF;
+            border: 1px solid #D7DDF8;
+        }
         QComboBox#comboBoxEmployeeSort {
             min-height: 38px;
             background: #FFFFFF;
@@ -564,6 +608,140 @@ void BusinessMainWindow::applyWindowStyles()
             padding: 0 12px;
             color: #1C1D21;
             font-size: 13px;
+        }
+        QComboBox,
+        QDateEdit,
+        QLineEdit,
+        QTextEdit,
+        QGroupBox,
+        QTabWidget::pane {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 16px;
+            color: #1C1D21;
+        }
+        QComboBox,
+        QDateEdit,
+        QLineEdit {
+            min-height: 40px;
+            padding: 0 14px;
+            font-size: 14px;
+        }
+        QTextEdit {
+            padding: 12px 14px;
+            font-size: 14px;
+        }
+        QComboBox::drop-down,
+        QDateEdit::drop-down {
+            width: 32px;
+            border: none;
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+        }
+        QComboBox::down-arrow,
+        QDateEdit::down-arrow {
+            image: url(%1);
+            width: 12px;
+            height: 12px;
+        }
+        QTabWidget::pane {
+            margin-top: 10px;
+            padding: 12px;
+        }
+        QTabBar::tab {
+            min-height: 36px;
+            padding: 0 16px;
+            border-radius: 12px;
+            background: #F3F5FC;
+            color: #8181A5;
+            font-size: 13px;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        QTabBar::tab:selected {
+            background: #EEF2FF;
+            color: #5E81F4;
+        }
+        QGroupBox {
+            margin-top: 12px;
+            padding: 18px 16px 16px 16px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 12px;
+            padding: 0 6px;
+            color: #1C1D21;
+        }
+        QPushButton#primaryActionButton,
+        QPushButton#settingsPrimaryButton,
+        QPushButton#communicationPrimaryButton {
+            min-height: 42px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 18px;
+            background: #5E81F4;
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#secondaryActionButton,
+        QPushButton#settingsSecondaryButton,
+        QPushButton#communicationSecondaryButton {
+            min-height: 42px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 18px;
+            background: #EEF2FF;
+            color: #5E81F4;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#ghostActionButton,
+        QPushButton#settingsGhostButton {
+            min-height: 42px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 18px;
+            background: #F3F4F8;
+            color: #8181A5;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QListWidget#paymentsEmployeeListWidget::item,
+        QListWidget#paymentsShiftListWidget::item,
+        QListWidget#notificationsHistoryListWidget::item,
+        QListWidget#shiftResponsesListWidget::item {
+            background: #F9FAFF;
+            border: 1px solid #E6EAF8;
+            border-radius: 16px;
+            padding: 14px 16px;
+            margin: 4px 0;
+        }
+        QListWidget#paymentsEmployeeListWidget::item:selected,
+        QListWidget#paymentsShiftListWidget::item:selected,
+        QListWidget#notificationsHistoryListWidget::item:selected,
+        QListWidget#shiftResponsesListWidget::item:selected {
+            background: #EEF2FF;
+            border: 1px solid #5E81F4;
+            color: #1C1D21;
+        }
+        QListWidget#paymentsEmployeeListWidget,
+        QListWidget#paymentsShiftListWidget,
+        QListWidget#notificationsHistoryListWidget,
+        QListWidget#shiftResponsesListWidget {
+            background: transparent;
+            border: none;
+            outline: 0;
+            padding: 4px;
+        }
+        QListWidget#paymentsEmployeeListWidget::viewport,
+        QListWidget#paymentsShiftListWidget::viewport,
+        QListWidget#notificationsHistoryListWidget::viewport,
+        QListWidget#shiftResponsesListWidget::viewport {
+            background: transparent;
+            border: none;
         }
         QPushButton#pushButtonAddEmployee,
         QPushButton#pushButtonAddPosition,
@@ -651,7 +829,7 @@ void BusinessMainWindow::applyWindowStyles()
             font-size: 14px;
             font-weight: 600;
         }
-    )");
+    )").arg(chevronPath));
 
     applyNavigationIcons();
 }
@@ -904,6 +1082,9 @@ void BusinessMainWindow::showSection(int index, const QString& sectionTitle)
         statisticsNavButton->setChecked(true);
     else if (index == 5)
         ui->pushButtonSettings->setChecked(true);
+
+    if (staffSortButton)
+        staffSortButton->setVisible(index == 1 && ui->stackedWidgetStaffContent->currentIndex() == 0);
 }
 
 void BusinessMainWindow::setupShiftsSection()
@@ -1565,10 +1746,39 @@ void BusinessMainWindow::setupStaffSection()
 {
     ui->comboBoxEmployeeSort->addItem("ФИО: А-Я");
     ui->comboBoxEmployeeSort->addItem("ФИО: Я-А");
+    ui->comboBoxEmployeeSort->hide();
+    ui->labelSortTitle->hide();
     ui->listWidgetEmployees->setAlternatingRowColors(false);
     ui->listWidgetEmployees->setFocusPolicy(Qt::NoFocus);
     ui->listWidgetPositions->setAlternatingRowColors(false);
     ui->listWidgetPositions->setFocusPolicy(Qt::NoFocus);
+
+    if (!staffSortButton)
+    {
+        staffSortButton = new QToolButton(ui->comboBoxEmployeeSort->parentWidget());
+        staffSortButton->setObjectName("staffSortButton");
+        staffSortButton->setPopupMode(QToolButton::InstantPopup);
+        staffSortButton->setToolTip("Сортировка сотрудников");
+        const QString filterIconPath = findAssetPath("free-icon-filter-2676824.png");
+        if (!filterIconPath.isEmpty())
+            staffSortButton->setIcon(QIcon(filterIconPath));
+        staffSortButton->setIconSize(QSize(16, 16));
+
+        auto *sortMenu = new QMenu(staffSortButton);
+        auto *sortAscAction = sortMenu->addAction("ФИО: А-Я");
+        auto *sortDescAction = sortMenu->addAction("ФИО: Я-А");
+        connect(sortAscAction, &QAction::triggered, this, [this]() {
+            ui->comboBoxEmployeeSort->setCurrentIndex(0);
+        });
+        connect(sortDescAction, &QAction::triggered, this, [this]() {
+            ui->comboBoxEmployeeSort->setCurrentIndex(1);
+        });
+        staffSortButton->setMenu(sortMenu);
+
+        if (auto *layout = qobject_cast<QHBoxLayout*>(ui->comboBoxEmployeeSort->parentWidget()->layout()))
+            layout->insertWidget(1, staffSortButton);
+    }
+    staffSortButton->hide();
 
     connect(ui->pushButtonStaffEmployeesView, &QPushButton::clicked, this, [this]() {
         showStaffSubsection(0, "Список сотрудников");
@@ -1659,6 +1869,8 @@ void BusinessMainWindow::showStaffSubsection(int index, const QString& title)
 {
     ui->stackedWidgetStaffContent->setCurrentIndex(index);
     ui->labelStaffContentTitle->setText(title);
+    if (staffSortButton)
+        staffSortButton->setVisible(index == 0 && ui->stackedWidgetSections->currentIndex() == 1);
 
     if (index == 0)
         ui->pushButtonStaffEmployeesView->setChecked(true);
@@ -1673,14 +1885,35 @@ void BusinessMainWindow::setupPaymentsSection()
 
     paymentsEmployeeListWidget = new QListWidget(this);
     paymentsEmployeeListWidget->setMinimumWidth(260);
-    paymentsEmployeeListWidget->setAlternatingRowColors(true);
+    paymentsEmployeeListWidget->setAlternatingRowColors(false);
+    paymentsEmployeeListWidget->setFocusPolicy(Qt::NoFocus);
+    paymentsEmployeeListWidget->setObjectName("paymentsEmployeeListWidget");
+
+    auto *leftPane = new QFrame(this);
+    leftPane->setObjectName("paymentsLeftCard");
+    auto *leftLayout = new QVBoxLayout(leftPane);
+    leftLayout->setContentsMargins(16, 16, 16, 16);
+    leftLayout->setSpacing(12);
+    auto *employeesTitle = new QLabel("Сотрудники", leftPane);
+    employeesTitle->setObjectName("sectionTitleLabel");
+    auto *employeesInfo = new QLabel("Выберите сотрудника, чтобы посмотреть начисления и оплату по сменам.", leftPane);
+    employeesInfo->setObjectName("sectionInfoLabel");
+    employeesInfo->setWordWrap(true);
+    leftLayout->addWidget(employeesTitle);
+    leftLayout->addWidget(employeesInfo);
+    leftLayout->addWidget(paymentsEmployeeListWidget, 1);
 
     auto *rightPane = new QFrame(this);
+    rightPane->setObjectName("paymentsRightCard");
     auto *rightLayout = new QVBoxLayout(rightPane);
+    rightLayout->setContentsMargins(16, 16, 16, 16);
     rightLayout->setSpacing(12);
 
+    auto *detailsTitle = new QLabel("Выплаты и начисления", rightPane);
+    detailsTitle->setObjectName("sectionTitleLabel");
     paymentsSummaryLabel = new QLabel("Выберите сотрудника для просмотра выплат", this);
     paymentsSummaryLabel->setWordWrap(true);
+    paymentsSummaryLabel->setObjectName("paymentsSummaryLabel");
 
     auto *filterLayout = new QHBoxLayout();
     auto *filterLabel = new QLabel("Фильтр:", this);
@@ -1698,26 +1931,32 @@ void BusinessMainWindow::setupPaymentsSection()
     revenueValidator->setNotation(QDoubleValidator::StandardNotation);
     paymentsRevenueEdit->setValidator(revenueValidator);
     paymentsSaveRevenueButton = new QPushButton("Сохранить выручку", this);
+    paymentsSaveRevenueButton->setObjectName("primaryActionButton");
     revenueLayout->addWidget(revenueLabel);
     revenueLayout->addWidget(paymentsRevenueEdit, 1);
     revenueLayout->addWidget(paymentsSaveRevenueButton);
 
     paymentsShiftListWidget = new QListWidget(this);
-    paymentsShiftListWidget->setAlternatingRowColors(true);
+    paymentsShiftListWidget->setAlternatingRowColors(false);
+    paymentsShiftListWidget->setFocusPolicy(Qt::NoFocus);
+    paymentsShiftListWidget->setObjectName("paymentsShiftListWidget");
 
     auto *buttonsLayout = new QHBoxLayout();
     paymentsMarkPaidButton = new QPushButton("Отметить смену оплаченной", this);
+    paymentsMarkPaidButton->setObjectName("secondaryActionButton");
     paymentsMarkAllPaidButton = new QPushButton("Оплатить все", this);
+    paymentsMarkAllPaidButton->setObjectName("primaryActionButton");
     buttonsLayout->addWidget(paymentsMarkPaidButton);
     buttonsLayout->addWidget(paymentsMarkAllPaidButton);
 
+    rightLayout->addWidget(detailsTitle);
     rightLayout->addWidget(paymentsSummaryLabel);
     rightLayout->addLayout(filterLayout);
     rightLayout->addLayout(revenueLayout);
     rightLayout->addWidget(paymentsShiftListWidget, 1);
     rightLayout->addLayout(buttonsLayout);
 
-    contentLayout->addWidget(paymentsEmployeeListWidget);
+    contentLayout->addWidget(leftPane);
     contentLayout->addWidget(rightPane, 1);
 
     ui->labelPaymentsPlaceholder->hide();
@@ -1751,7 +1990,9 @@ void BusinessMainWindow::setupCommunicationSection()
     messagesLayout->setSpacing(16);
 
     auto *messageFormFrame = new QFrame(messagesPage);
+    messageFormFrame->setObjectName("communicationFormCard");
     auto *messageFormLayout = new QVBoxLayout(messageFormFrame);
+    messageFormLayout->setContentsMargins(16, 16, 16, 16);
     messageFormLayout->setSpacing(12);
 
     auto *messageTitle = new QLabel("Новое сообщение", messageFormFrame);
@@ -1759,6 +2000,7 @@ void BusinessMainWindow::setupCommunicationSection()
     titleFont.setBold(true);
     titleFont.setPointSize(13);
     messageTitle->setFont(titleFont);
+    messageTitle->setObjectName("sectionTitleLabel");
 
     auto *messageForm = new QFormLayout();
     messageTypeComboBox = new QComboBox(messageFormFrame);
@@ -1781,7 +2023,9 @@ void BusinessMainWindow::setupCommunicationSection()
 
     auto *messageButtonsLayout = new QHBoxLayout();
     sendMessageButton = new QPushButton("Отправить", messageFormFrame);
+    sendMessageButton->setObjectName("communicationPrimaryButton");
     clearMessageButton = new QPushButton("Очистить", messageFormFrame);
+    clearMessageButton->setObjectName("communicationSecondaryButton");
     messageButtonsLayout->addWidget(sendMessageButton);
     messageButtonsLayout->addWidget(clearMessageButton);
 
@@ -1791,12 +2035,17 @@ void BusinessMainWindow::setupCommunicationSection()
     messageFormLayout->addStretch();
 
     auto *historyFrame = new QFrame(messagesPage);
+    historyFrame->setObjectName("communicationHistoryCard");
     auto *historyLayout = new QVBoxLayout(historyFrame);
+    historyLayout->setContentsMargins(16, 16, 16, 16);
     historyLayout->setSpacing(12);
     auto *historyTitle = new QLabel("История уведомлений", historyFrame);
     historyTitle->setFont(titleFont);
+    historyTitle->setObjectName("sectionTitleLabel");
     notificationsHistoryListWidget = new QListWidget(historyFrame);
-    notificationsHistoryListWidget->setAlternatingRowColors(true);
+    notificationsHistoryListWidget->setObjectName("notificationsHistoryListWidget");
+    notificationsHistoryListWidget->setAlternatingRowColors(false);
+    notificationsHistoryListWidget->setFocusPolicy(Qt::NoFocus);
     historyLayout->addWidget(historyTitle);
     historyLayout->addWidget(notificationsHistoryListWidget, 1);
 
@@ -1806,17 +2055,27 @@ void BusinessMainWindow::setupCommunicationSection()
     auto *responsesPage = new QWidget(this);
     auto *responsesLayout = new QVBoxLayout(responsesPage);
     responsesLayout->setSpacing(12);
+    auto *responsesFrame = new QFrame(responsesPage);
+    responsesFrame->setObjectName("communicationResponsesCard");
+    auto *responsesFrameLayout = new QVBoxLayout(responsesFrame);
+    responsesFrameLayout->setContentsMargins(16, 16, 16, 16);
+    responsesFrameLayout->setSpacing(12);
     auto *responsesHeaderLayout = new QHBoxLayout();
     auto *responsesTitle = new QLabel("Отклики на свободные позиции", responsesPage);
     responsesTitle->setFont(titleFont);
+    responsesTitle->setObjectName("sectionTitleLabel");
     auto *refreshResponsesButton = new QPushButton("Обновить", responsesPage);
+    refreshResponsesButton->setObjectName("communicationSecondaryButton");
     responsesHeaderLayout->addWidget(responsesTitle);
     responsesHeaderLayout->addStretch();
     responsesHeaderLayout->addWidget(refreshResponsesButton);
     shiftResponsesListWidget = new QListWidget(responsesPage);
-    shiftResponsesListWidget->setAlternatingRowColors(true);
-    responsesLayout->addLayout(responsesHeaderLayout);
-    responsesLayout->addWidget(shiftResponsesListWidget, 1);
+    shiftResponsesListWidget->setObjectName("shiftResponsesListWidget");
+    shiftResponsesListWidget->setAlternatingRowColors(false);
+    shiftResponsesListWidget->setFocusPolicy(Qt::NoFocus);
+    responsesFrameLayout->addLayout(responsesHeaderLayout);
+    responsesFrameLayout->addWidget(shiftResponsesListWidget, 1);
+    responsesLayout->addWidget(responsesFrame, 1);
 
     communicationTabWidget->addTab(messagesPage, "Сообщения");
     communicationTabWidget->addTab(responsesPage, "Отклики на смены");
@@ -2034,19 +2293,27 @@ void BusinessMainWindow::setupStatisticsSection()
     scrollArea->setFrameShape(QFrame::NoFrame);
 
     auto *container = new QWidget(scrollArea);
+    container->setMinimumWidth(1180);
     auto *containerLayout = new QVBoxLayout(container);
-    containerLayout->setSpacing(16);
+    containerLayout->setSpacing(18);
 
     auto *filterFrame = new QFrame(container);
+    filterFrame->setObjectName("statisticsFilterCard");
     auto *filterLayout = new QHBoxLayout(filterFrame);
+    filterLayout->setContentsMargins(16, 16, 16, 16);
+    filterLayout->setSpacing(12);
     auto *periodLabel = new QLabel("Период:", filterFrame);
+    periodLabel->setObjectName("sectionInfoLabel");
     statisticsStartDateEdit = new QDateEdit(QDate::currentDate().addMonths(-1), filterFrame);
     statisticsStartDateEdit->setCalendarPopup(true);
     statisticsStartDateEdit->setDisplayFormat("dd.MM.yyyy");
+    statisticsStartDateEdit->setMinimumWidth(150);
     statisticsEndDateEdit = new QDateEdit(QDate::currentDate(), filterFrame);
     statisticsEndDateEdit->setCalendarPopup(true);
     statisticsEndDateEdit->setDisplayFormat("dd.MM.yyyy");
+    statisticsEndDateEdit->setMinimumWidth(150);
     auto *refreshButton = new QPushButton("Обновить статистику", filterFrame);
+    refreshButton->setObjectName("primaryActionButton");
 
     filterLayout->addWidget(periodLabel);
     filterLayout->addWidget(statisticsStartDateEdit);
@@ -2057,18 +2324,14 @@ void BusinessMainWindow::setupStatisticsSection()
 
     auto createKpiCard = [container](const QString& title, QLabel *&valueLabel) {
         auto *frame = new QFrame(container);
-        frame->setFrameShape(QFrame::StyledPanel);
+        frame->setObjectName("shiftKpiCard");
         auto *layout = new QVBoxLayout(frame);
+        layout->setContentsMargins(16, 16, 16, 16);
         layout->setSpacing(6);
         auto *titleLabel = new QLabel(title, frame);
-        QFont titleFont = titleLabel->font();
-        titleFont.setBold(true);
-        titleLabel->setFont(titleFont);
+        titleLabel->setObjectName("shiftKpiTitleLabel");
         valueLabel = new QLabel("-", frame);
-        QFont valueFont = valueLabel->font();
-        valueFont.setPointSize(valueFont.pointSize() + 3);
-        valueFont.setBold(true);
-        valueLabel->setFont(valueFont);
+        valueLabel->setObjectName("shiftKpiValueLabel");
         valueLabel->setWordWrap(true);
         layout->addWidget(titleLabel);
         layout->addWidget(valueLabel);
@@ -2085,8 +2348,11 @@ void BusinessMainWindow::setupStatisticsSection()
 
     auto createInfoBlock = [container](const QString& title, QLabel *&contentLabel) {
         auto *group = new QGroupBox(title, container);
+        group->setMinimumHeight(210);
         auto *layout = new QVBoxLayout(group);
+        layout->setContentsMargins(18, 18, 18, 18);
         contentLabel = new QLabel("-", group);
+        contentLabel->setStyleSheet("font-size: 14px; color: #1C1D21; line-height: 1.5;");
         contentLabel->setWordWrap(true);
         contentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
         layout->addWidget(contentLabel);
@@ -2105,7 +2371,10 @@ void BusinessMainWindow::setupStatisticsSection()
                                    StatisticsChartWidget *&secondChartView) {
         auto *group = new QGroupBox(title, container);
         auto *layout = new QVBoxLayout(group);
+        layout->setContentsMargins(18, 18, 18, 18);
+        layout->setSpacing(14);
         summaryLabel = new QLabel("-", group);
+        summaryLabel->setStyleSheet("font-size: 14px; color: #1C1D21; line-height: 1.5;");
         summaryLabel->setWordWrap(true);
         summaryLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
@@ -2648,7 +2917,9 @@ void BusinessMainWindow::setupSettingsSection()
 
     {
         auto *settingsFrame = new QFrame(this);
+        settingsFrame->setObjectName("settingsMainCard");
         auto *settingsLayout = new QVBoxLayout(settingsFrame);
+        settingsLayout->setContentsMargins(20, 20, 20, 20);
         settingsLayout->setSpacing(16);
 
         auto *titleLabel = new QLabel(QString::fromUtf8("Настройки предприятия"), settingsFrame);
@@ -2656,22 +2927,27 @@ void BusinessMainWindow::setupSettingsSection()
         titleFont.setBold(true);
         titleFont.setPointSize(13);
         titleLabel->setFont(titleFont);
+        titleLabel->setObjectName("sectionTitleLabel");
 
         auto *descriptionLabel = new QLabel(
             QString::fromUtf8("VK-бот теперь является единым сервисом системы. Администратор предприятия не настраивает токены и API, а только включает уведомления и дает сотрудникам ссылку на бота."),
             settingsFrame);
+        descriptionLabel->setObjectName("settingsDescriptionLabel");
         descriptionLabel->setWordWrap(true);
 
         auto *botFrame = new QFrame(settingsFrame);
-        botFrame->setFrameShape(QFrame::StyledPanel);
+        botFrame->setObjectName("settingsBotCard");
         auto *botLayout = new QVBoxLayout(botFrame);
+        botLayout->setContentsMargins(16, 16, 16, 16);
         auto *botTitleLabel = new QLabel(QString::fromUtf8("Единый VK-бот системы"), botFrame);
         QFont botTitleFont = botTitleLabel->font();
         botTitleFont.setBold(true);
         botTitleLabel->setFont(botTitleFont);
+        botTitleLabel->setObjectName("sectionTitleLabel");
         auto *botInfoLabel = new QLabel(
             QString::fromUtf8("Все предприятия используют один общий VK-бот. Сотрудники пишут боту один раз, после этого система сможет отправлять им уведомления о сменах, объявлениях и выплатах."),
             botFrame);
+        botInfoLabel->setObjectName("sectionInfoLabel");
         botInfoLabel->setWordWrap(true);
         botLayout->addWidget(botTitleLabel);
         botLayout->addWidget(botInfoLabel);
@@ -2688,8 +2964,11 @@ void BusinessMainWindow::setupSettingsSection()
 
         auto *buttonsLayout = new QHBoxLayout();
         auto *saveSettingsButton = new QPushButton(QString::fromUtf8("Сохранить настройки"), settingsFrame);
+        saveSettingsButton->setObjectName("settingsPrimaryButton");
         auto *checkConnectionButton = new QPushButton(QString::fromUtf8("Проверить backend"), settingsFrame);
+        checkConnectionButton->setObjectName("settingsSecondaryButton");
         auto *activityLogButton = new QPushButton(QString::fromUtf8("Журнал действий"), settingsFrame);
+        activityLogButton->setObjectName("settingsSecondaryButton");
         buttonsLayout->addWidget(saveSettingsButton);
         buttonsLayout->addWidget(checkConnectionButton);
         buttonsLayout->addWidget(activityLogButton);
@@ -2697,12 +2976,15 @@ void BusinessMainWindow::setupSettingsSection()
 
         auto *accountActionsLayout = new QHBoxLayout();
         auto *backToBusinessesButton = new QPushButton(QString::fromUtf8("К списку предприятий"), settingsFrame);
+        backToBusinessesButton->setObjectName("settingsGhostButton");
         auto *logoutButton = new QPushButton(QString::fromUtf8("Выйти из аккаунта"), settingsFrame);
+        logoutButton->setObjectName("settingsGhostButton");
         accountActionsLayout->addWidget(backToBusinessesButton);
         accountActionsLayout->addWidget(logoutButton);
         accountActionsLayout->addStretch();
 
         vkConnectionStatusLabel = new QLabel(QString::fromUtf8("Статус: подключение не проверялось"), settingsFrame);
+        vkConnectionStatusLabel->setObjectName("vkConnectionStatusLabel");
         vkConnectionStatusLabel->setWordWrap(true);
 
         settingsLayout->addWidget(titleLabel);

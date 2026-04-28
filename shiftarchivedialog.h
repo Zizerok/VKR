@@ -16,6 +16,7 @@ private:
     int currentBusinessId;
     QListWidget *archiveListWidget;
 
+    void buildUi();
     void loadArchive();
 };
 

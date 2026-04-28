@@ -67,6 +67,7 @@ private:
     QLabel *shiftDayCommentLabel = nullptr;
     QToolButton *shiftListFilterButton = nullptr;
     QToolButton *shiftListSortButton = nullptr;
+    QToolButton *staffSortButton = nullptr;
     int shiftListFilterMode = 0;
     int shiftListSortMode = 0;
     QListWidget *paymentsEmployeeListWidget = nullptr;
