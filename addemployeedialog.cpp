@@ -13,57 +13,101 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+namespace
+{
+void styleInfoBox(QMessageBox &box, const QString &buttonColor)
+{
+    box.setStyleSheet(QString(R"(
+        QMessageBox { background: #F6F6F6; }
+        QMessageBox QLabel { color: #1C1D21; font-size: 14px; }
+        QMessageBox QLabel#qt_msgbox_label { font-size: 18px; font-weight: 700; }
+        QMessageBox QLabel#qt_msgbox_informativelabel { color: #8181A5; font-size: 13px; min-width: 280px; }
+        QMessageBox QPushButton {
+            min-width: 120px; min-height: 40px; border-radius: 12px; border: none;
+            padding: 0 14px; font-size: 14px; font-weight: 600;
+            background: %1; color: #FFFFFF;
+        }
+    )").arg(buttonColor));
+}
+
+void showStyledWarning(QWidget *parent, const QString &title, const QString &text)
+{
+    QMessageBox box(parent);
+    box.setIcon(QMessageBox::Warning);
+    box.setWindowTitle(title);
+    box.setText(title);
+    box.setInformativeText(text);
+    box.setStandardButtons(QMessageBox::Ok);
+    box.button(QMessageBox::Ok)->setText("Понятно");
+    styleInfoBox(box, "#F4B85E");
+    box.exec();
+}
+
+void showStyledError(QWidget *parent, const QString &title, const QString &text)
+{
+    QMessageBox box(parent);
+    box.setIcon(QMessageBox::Critical);
+    box.setWindowTitle(title);
+    box.setText(title);
+    box.setInformativeText(text);
+    box.setStandardButtons(QMessageBox::Ok);
+    box.button(QMessageBox::Ok)->setText("Понятно");
+    styleInfoBox(box, "#FF808B");
+    box.exec();
+}
+}
+
 AddEmployeeDialog::AddEmployeeDialog(int businessId, QWidget *parent)
     : QDialog(parent)
     , currentBusinessId(businessId)
 {
     setWindowTitle("Добавление сотрудника");
-    resize(760, 520);
+    resize(860, 560);
+    setModal(true);
 
     auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(24, 24, 24, 24);
     mainLayout->setSpacing(18);
 
     auto *titleLabel = new QLabel("Новый сотрудник", this);
-    QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(16);
-    titleFont.setBold(true);
-    titleLabel->setFont(titleFont);
+    titleLabel->setObjectName("dialogTitleLabel");
+
+    auto *subtitleLabel = new QLabel(
+        "Заполните основные данные сотрудника. Фото пока остаётся как заглушка.",
+        this);
+    subtitleLabel->setObjectName("dialogSubtitleLabel");
+    subtitleLabel->setWordWrap(true);
 
     auto *contentLayout = new QHBoxLayout();
-    contentLayout->setSpacing(24);
+    contentLayout->setSpacing(22);
 
-    auto *photoLayout = new QVBoxLayout();
-    photoLayout->setSpacing(12);
+    auto *photoCard = new QFrame(this);
+    photoCard->setObjectName("photoCard");
+    photoCard->setFixedWidth(240);
+    auto *photoLayout = new QVBoxLayout(photoCard);
+    photoLayout->setContentsMargins(18, 18, 18, 18);
+    photoLayout->setSpacing(14);
 
-    auto *photoFrame = new QFrame(this);
-    photoFrame->setFixedSize(220, 280);
-    photoFrame->setFrameShape(QFrame::StyledPanel);
-    photoFrame->setStyleSheet("background-color: white;");
-
-    auto *photoFrameLayout = new QVBoxLayout(photoFrame);
-    photoFrameLayout->setContentsMargins(16, 16, 16, 16);
-    photoFrameLayout->setSpacing(12);
-
-    auto *photoPlaceholder = new QLabel("Фото\nсотрудника", photoFrame);
+    auto *photoPlaceholder = new QLabel("Фото\nсотрудника", photoCard);
+    photoPlaceholder->setObjectName("photoPlaceholder");
     photoPlaceholder->setAlignment(Qt::AlignCenter);
-    photoPlaceholder->setStyleSheet(
-        "border: 2px dashed #bdbdbd;"
-        "background-color: #fafafa;"
-        "color: #666666;"
-        "font-size: 16px;"
-        "padding: 24px;");
+    photoPlaceholder->setMinimumHeight(280);
 
-    auto *addPhotoButton = new QPushButton("Добавить фото", photoFrame);
+    auto *addPhotoButton = new QPushButton("Добавить фото", photoCard);
+    addPhotoButton->setObjectName("secondaryButton");
 
-    photoFrameLayout->addWidget(photoPlaceholder, 1);
-    photoFrameLayout->addWidget(addPhotoButton);
+    photoLayout->addWidget(photoPlaceholder, 1);
+    photoLayout->addWidget(addPhotoButton);
 
-    photoLayout->addWidget(photoFrame);
-    photoLayout->addStretch();
+    auto *formCard = new QFrame(this);
+    formCard->setObjectName("formCard");
+    auto *formCardLayout = new QVBoxLayout(formCard);
+    formCardLayout->setContentsMargins(20, 20, 20, 20);
+    formCardLayout->setSpacing(16);
 
     auto *formLayout = new QFormLayout();
-    formLayout->setLabelAlignment(Qt::AlignLeft);
-    formLayout->setFormAlignment(Qt::AlignTop);
+    formLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    formLayout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
     formLayout->setHorizontalSpacing(16);
     formLayout->setVerticalSpacing(14);
 
@@ -77,47 +121,106 @@ AddEmployeeDialog::AddEmployeeDialog(int businessId, QWidget *parent)
     positionComboBox = new QComboBox(this);
     addEmployeeButton = new QPushButton("Добавить сотрудника", this);
 
+    lastNameEdit->setPlaceholderText("Фамилия");
+    firstNameEdit->setPlaceholderText("Имя");
+    middleNameEdit->setPlaceholderText("Отчество");
+    phoneEdit->setPlaceholderText("+7 (___) ___-__-__");
+    vkIdEdit->setPlaceholderText("Например: 215882848");
+
     birthDateEdit->setCalendarPopup(true);
     birthDateEdit->setDisplayFormat("dd.MM.yyyy");
     birthDateEdit->setDate(QDate::currentDate());
 
-    genderComboBox->addItem("Не указан");
-    genderComboBox->addItem("Мужской");
-    genderComboBox->addItem("Женский");
+    genderComboBox->addItems({"Не указан", "Мужской", "Женский"});
 
     positionComboBox->addItem("Не выбрана");
     const QStringList positions = DatabaseManager::instance().getPositionNames(currentBusinessId);
-    for (const QString& position : positions)
+    for (const QString &position : positions)
         positionComboBox->addItem(position);
 
-    lastNameEdit->setPlaceholderText("Введите фамилию");
-    firstNameEdit->setPlaceholderText("Введите имя");
-    middleNameEdit->setPlaceholderText("Введите отчество");
-    phoneEdit->setPlaceholderText("+7 (___) ___-__-__");
-    vkIdEdit->setPlaceholderText("Например: id123456789");
+    formLayout->addRow("Фамилия", lastNameEdit);
+    formLayout->addRow("Имя", firstNameEdit);
+    formLayout->addRow("Отчество", middleNameEdit);
+    formLayout->addRow("Дата рождения", birthDateEdit);
+    formLayout->addRow("Пол", genderComboBox);
+    formLayout->addRow("Телефон", phoneEdit);
+    formLayout->addRow("VK ID", vkIdEdit);
+    formLayout->addRow("Должность", positionComboBox);
 
-    formLayout->addRow("Фамилия:", lastNameEdit);
-    formLayout->addRow("Имя:", firstNameEdit);
-    formLayout->addRow("Отчество:", middleNameEdit);
-    formLayout->addRow("Дата рождения:", birthDateEdit);
-    formLayout->addRow("Пол:", genderComboBox);
-    formLayout->addRow("Номер телефона:", phoneEdit);
-    formLayout->addRow("ID VK:", vkIdEdit);
-    formLayout->addRow("Должность:", positionComboBox);
+    addEmployeeButton->setObjectName("primaryButton");
 
-    auto *rightLayout = new QVBoxLayout();
-    rightLayout->setSpacing(18);
-    rightLayout->addLayout(formLayout);
-    rightLayout->addStretch();
-    rightLayout->addWidget(addEmployeeButton);
+    formCardLayout->addLayout(formLayout);
+    formCardLayout->addStretch();
+    formCardLayout->addWidget(addEmployeeButton);
 
-    contentLayout->addLayout(photoLayout);
-    contentLayout->addLayout(rightLayout, 1);
+    contentLayout->addWidget(photoCard);
+    contentLayout->addWidget(formCard, 1);
 
     connect(addEmployeeButton, &QPushButton::clicked, this, &AddEmployeeDialog::saveEmployee);
 
     mainLayout->addWidget(titleLabel);
+    mainLayout->addWidget(subtitleLabel);
     mainLayout->addLayout(contentLayout);
+
+    setStyleSheet(R"(
+        QDialog {
+            background: #F6F6F6;
+        }
+        QLabel#dialogTitleLabel {
+            color: #1C1D21;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        QLabel#dialogSubtitleLabel {
+            color: #8181A5;
+            font-size: 14px;
+        }
+        QFrame#photoCard, QFrame#formCard {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 22px;
+        }
+        QLabel#photoPlaceholder {
+            background: #FAFBFF;
+            border: 1px dashed #D6DBEE;
+            border-radius: 18px;
+            color: #8181A5;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        QLineEdit, QComboBox, QDateEdit {
+            min-height: 40px;
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 12px;
+            padding: 0 12px;
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+            border: 1px solid #5E81F4;
+        }
+        QLabel {
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QPushButton {
+            min-height: 42px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 16px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#primaryButton {
+            background: #5E81F4;
+            color: #FFFFFF;
+        }
+        QPushButton#secondaryButton {
+            background: #E9EDFB;
+            color: #5E81F4;
+        }
+    )");
 }
 
 void AddEmployeeDialog::saveEmployee()
@@ -127,7 +230,7 @@ void AddEmployeeDialog::saveEmployee()
 
     if (lastName.isEmpty() || firstName.isEmpty())
     {
-        QMessageBox::warning(this, "Ошибка", "Заполните как минимум фамилию и имя сотрудника.");
+        showStyledWarning(this, "Ошибка", "Заполните как минимум фамилию и имя сотрудника.");
         return;
     }
 
@@ -140,12 +243,11 @@ void AddEmployeeDialog::saveEmployee()
         genderComboBox->currentText(),
         phoneEdit->text(),
         vkIdEdit->text(),
-        positionComboBox->currentText()
-        );
+        positionComboBox->currentText());
 
     if (!ok)
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить сотрудника в базу данных.");
+        showStyledError(this, "Ошибка", "Не удалось сохранить сотрудника в базу данных.");
         return;
     }
 

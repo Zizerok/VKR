@@ -16,6 +16,63 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+namespace
+{
+void styleMessage(QMessageBox &box, const QString &buttonColor)
+{
+    box.setStyleSheet(QString(R"(
+        QMessageBox { background: #F6F6F6; }
+        QMessageBox QLabel { color: #1C1D21; font-size: 14px; }
+        QMessageBox QLabel#qt_msgbox_label { font-size: 18px; font-weight: 700; }
+        QMessageBox QLabel#qt_msgbox_informativelabel { color: #8181A5; font-size: 13px; min-width: 280px; }
+        QMessageBox QPushButton {
+            min-width: 120px; min-height: 40px; border-radius: 12px; border: none;
+            padding: 0 14px; font-size: 14px; font-weight: 600;
+            background: %1; color: #FFFFFF;
+        }
+    )").arg(buttonColor));
+}
+
+void showEmployeeError(QWidget *parent, const QString &title, const QString &text)
+{
+    QMessageBox box(parent);
+    box.setIcon(QMessageBox::Critical);
+    box.setWindowTitle(title);
+    box.setText(title);
+    box.setInformativeText(text);
+    box.setStandardButtons(QMessageBox::Ok);
+    box.button(QMessageBox::Ok)->setText("Понятно");
+    styleMessage(box, "#FF808B");
+    box.exec();
+}
+
+void showEmployeeWarning(QWidget *parent, const QString &title, const QString &text)
+{
+    QMessageBox box(parent);
+    box.setIcon(QMessageBox::Warning);
+    box.setWindowTitle(title);
+    box.setText(title);
+    box.setInformativeText(text);
+    box.setStandardButtons(QMessageBox::Ok);
+    box.button(QMessageBox::Ok)->setText("Понятно");
+    styleMessage(box, "#F4B85E");
+    box.exec();
+}
+
+void showEmployeeInfo(QWidget *parent, const QString &title, const QString &text)
+{
+    QMessageBox box(parent);
+    box.setIcon(QMessageBox::Information);
+    box.setWindowTitle(title);
+    box.setText(title);
+    box.setInformativeText(text);
+    box.setStandardButtons(QMessageBox::Ok);
+    box.button(QMessageBox::Ok)->setText("Понятно");
+    styleMessage(box, "#5E81F4");
+    box.exec();
+}
+}
+
 EmployeeCardWindow::EmployeeCardWindow(int employeeId, QWidget *parent)
     : QMainWindow(parent)
     , currentEmployeeId(employeeId)
@@ -28,10 +85,11 @@ EmployeeCardWindow::EmployeeCardWindow(int employeeId, QWidget *parent)
 void EmployeeCardWindow::buildUi()
 {
     setWindowTitle("Карточка сотрудника");
-    resize(980, 760);
+    resize(1080, 820);
 
     auto *scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
 
     auto *central = new QWidget(scrollArea);
     auto *mainLayout = new QVBoxLayout(central);
@@ -39,47 +97,48 @@ void EmployeeCardWindow::buildUi()
     mainLayout->setSpacing(20);
 
     auto *headerFrame = new QFrame(central);
+    headerFrame->setObjectName("headerCard");
     auto *headerLayout = new QHBoxLayout(headerFrame);
+    headerLayout->setContentsMargins(20, 20, 20, 20);
     headerLayout->setSpacing(20);
 
     photoLabel = new QLabel("Фото\nсотрудника", headerFrame);
+    photoLabel->setObjectName("photoPlaceholder");
     photoLabel->setFixedSize(180, 220);
     photoLabel->setAlignment(Qt::AlignCenter);
-    photoLabel->setStyleSheet(
-        "background-color: white;"
-        "border: 1px solid #cfcfcf;"
-        "font-size: 16px;"
-        "color: #666666;");
 
     auto *headerInfoLayout = new QVBoxLayout();
     headerInfoLayout->setSpacing(10);
 
     headerNameLabel = new QLabel("Сотрудник", headerFrame);
-    QFont nameFont = headerNameLabel->font();
-    nameFont.setPointSize(20);
-    nameFont.setBold(true);
-    headerNameLabel->setFont(nameFont);
+    headerNameLabel->setObjectName("headerNameLabel");
 
     headerPositionLabel = new QLabel("Должность", headerFrame);
-    QFont positionFont = headerPositionLabel->font();
-    positionFont.setPointSize(13);
-    headerPositionLabel->setFont(positionFont);
+    headerPositionLabel->setObjectName("headerPositionLabel");
 
     auto *statusLayout = new QHBoxLayout();
-    auto *statusTitle = new QLabel("Статус:", headerFrame);
+    statusLayout->setSpacing(10);
+    auto *statusTitle = new QLabel("Статус", headerFrame);
+    statusTitle->setObjectName("fieldLabel");
     statusComboBox = new QComboBox(headerFrame);
-    statusComboBox->addItem("Активен");
-    statusComboBox->addItem("Неактивен");
+    statusComboBox->addItems({"Активен", "Неактивен"});
     statusLayout->addWidget(statusTitle);
     statusLayout->addWidget(statusComboBox);
     statusLayout->addStretch();
 
     auto *buttonsLayout = new QHBoxLayout();
+    buttonsLayout->setSpacing(10);
     editButton = new QPushButton("Редактировать", headerFrame);
+    editButton->setObjectName("secondaryButton");
     saveButton = new QPushButton("Сохранить", headerFrame);
+    saveButton->setObjectName("primaryButton");
     buttonsLayout->addWidget(editButton);
     buttonsLayout->addWidget(saveButton);
     buttonsLayout->addStretch();
+
+    coveredPositionsLabel = new QLabel("-", headerFrame);
+    coveredPositionsLabel->setObjectName("badgeInfoLabel");
+    coveredPositionsLabel->setWordWrap(true);
 
     connect(editButton, &QPushButton::clicked, this, [this]() {
         setEditMode(true);
@@ -92,6 +151,7 @@ void EmployeeCardWindow::buildUi()
     headerInfoLayout->addWidget(headerPositionLabel);
     headerInfoLayout->addLayout(statusLayout);
     headerInfoLayout->addLayout(buttonsLayout);
+    headerInfoLayout->addWidget(coveredPositionsLabel);
     headerInfoLayout->addStretch();
 
     headerLayout->addWidget(photoLabel);
@@ -100,22 +160,17 @@ void EmployeeCardWindow::buildUi()
     auto *mainContentLayout = new QHBoxLayout();
     mainContentLayout->setSpacing(20);
 
-    auto *leftColumn = new QVBoxLayout();
-    leftColumn->setSpacing(18);
-    auto *rightColumn = new QVBoxLayout();
-    rightColumn->setSpacing(18);
-
     auto *basicFrame = new QFrame(central);
+    basicFrame->setObjectName("sectionCard");
     auto *basicLayout = new QVBoxLayout(basicFrame);
+    basicLayout->setContentsMargins(20, 20, 20, 20);
+    basicLayout->setSpacing(14);
     auto *basicTitle = new QLabel("Основные данные", basicFrame);
-    QFont sectionFont = basicTitle->font();
-    sectionFont.setPointSize(15);
-    sectionFont.setBold(true);
-    basicTitle->setFont(sectionFont);
+    basicTitle->setObjectName("sectionTitleLabel");
 
     auto *basicForm = new QFormLayout();
     basicForm->setHorizontalSpacing(14);
-    basicForm->setVerticalSpacing(12);
+    basicForm->setVerticalSpacing(14);
 
     lastNameEdit = new QLineEdit(basicFrame);
     firstNameEdit = new QLineEdit(basicFrame);
@@ -130,49 +185,46 @@ void EmployeeCardWindow::buildUi()
     birthDateEdit->setDisplayFormat("dd.MM.yyyy");
     genderComboBox->addItems({"Не указан", "Мужской", "Женский"});
 
-    basicForm->addRow("Фамилия:", lastNameEdit);
-    basicForm->addRow("Имя:", firstNameEdit);
-    basicForm->addRow("Отчество:", middleNameEdit);
-    basicForm->addRow("Дата рождения:", birthDateEdit);
-    basicForm->addRow("Пол:", genderComboBox);
-    basicForm->addRow("Телефон:", phoneEdit);
-    basicForm->addRow("VK ID:", vkIdEdit);
-    basicForm->addRow("Должность:", positionComboBox);
+    basicForm->addRow("Фамилия", lastNameEdit);
+    basicForm->addRow("Имя", firstNameEdit);
+    basicForm->addRow("Отчество", middleNameEdit);
+    basicForm->addRow("Дата рождения", birthDateEdit);
+    basicForm->addRow("Пол", genderComboBox);
+    basicForm->addRow("Телефон", phoneEdit);
+    basicForm->addRow("VK ID", vkIdEdit);
+    basicForm->addRow("Должность", positionComboBox);
 
     basicLayout->addWidget(basicTitle);
     basicLayout->addLayout(basicForm);
 
     auto *workFrame = new QFrame(central);
+    workFrame->setObjectName("sectionCard");
     auto *workLayout = new QVBoxLayout(workFrame);
+    workLayout->setContentsMargins(20, 20, 20, 20);
+    workLayout->setSpacing(14);
     auto *workTitle = new QLabel("Рабочая информация", workFrame);
-    workTitle->setFont(sectionFont);
+    workTitle->setObjectName("sectionTitleLabel");
 
     auto *workForm = new QFormLayout();
     workForm->setHorizontalSpacing(14);
-    workForm->setVerticalSpacing(12);
+    workForm->setVerticalSpacing(14);
 
     hiredDateEdit = new QDateEdit(workFrame);
     hiredDateEdit->setCalendarPopup(true);
     hiredDateEdit->setDisplayFormat("dd.MM.yyyy");
     commentEdit = new QTextEdit(workFrame);
-    commentEdit->setMinimumHeight(110);
+    commentEdit->setMinimumHeight(120);
     salaryRateEdit = new QLineEdit(workFrame);
-    coveredPositionsLabel = new QLabel("-", workFrame);
-    coveredPositionsLabel->setWordWrap(true);
 
-    workForm->addRow("Дата приема:", hiredDateEdit);
-    workForm->addRow("Комментарий:", commentEdit);
-    workForm->addRow("Оклад или ставка:", salaryRateEdit);
-    workForm->addRow("Может выполнять:", coveredPositionsLabel);
+    workForm->addRow("Дата приёма", hiredDateEdit);
+    workForm->addRow("Комментарий", commentEdit);
+    workForm->addRow("Оклад или ставка", salaryRateEdit);
 
     workLayout->addWidget(workTitle);
     workLayout->addLayout(workForm);
 
-    leftColumn->addWidget(basicFrame);
-    rightColumn->addWidget(workFrame);
-
-    mainContentLayout->addLayout(leftColumn, 1);
-    mainContentLayout->addLayout(rightColumn, 1);
+    mainContentLayout->addWidget(basicFrame, 1);
+    mainContentLayout->addWidget(workFrame, 1);
 
     mainLayout->addWidget(headerFrame);
     mainLayout->addLayout(mainContentLayout);
@@ -180,6 +232,87 @@ void EmployeeCardWindow::buildUi()
 
     scrollArea->setWidget(central);
     setCentralWidget(scrollArea);
+
+    setStyleSheet(R"(
+        QMainWindow, QWidget {
+            background: #F6F6F6;
+        }
+        QFrame#headerCard, QFrame#sectionCard {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 22px;
+        }
+        QLabel#photoPlaceholder {
+            background: #FAFBFF;
+            border: 1px dashed #D6DBEE;
+            border-radius: 18px;
+            color: #8181A5;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        QLabel#headerNameLabel {
+            color: #1C1D21;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        QLabel#headerPositionLabel {
+            color: #8181A5;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        QLabel#sectionTitleLabel {
+            color: #1C1D21;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QLabel#fieldLabel {
+            color: #8181A5;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        QLabel#badgeInfoLabel {
+            background: #FAFBFF;
+            border: 1px solid #ECECF2;
+            border-radius: 14px;
+            padding: 10px 12px;
+            color: #1C1D21;
+            font-size: 13px;
+        }
+        QLineEdit, QComboBox, QDateEdit, QTextEdit {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 12px;
+            padding: 8px 12px;
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus {
+            border: 1px solid #5E81F4;
+        }
+        QPushButton {
+            min-height: 42px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 16px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#primaryButton {
+            background: #5E81F4;
+            color: #FFFFFF;
+        }
+        QPushButton#secondaryButton {
+            background: #E9EDFB;
+            color: #5E81F4;
+        }
+        QLabel {
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QScrollArea {
+            border: none;
+        }
+    )");
 }
 
 void EmployeeCardWindow::loadEmployee()
@@ -187,7 +320,7 @@ void EmployeeCardWindow::loadEmployee()
     QSqlQuery query = DatabaseManager::instance().getEmployeeById(currentEmployeeId);
     if (!query.next())
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось загрузить данные сотрудника.");
+        showEmployeeError(this, "Ошибка", "Не удалось загрузить данные сотрудника.");
         close();
         return;
     }
@@ -225,16 +358,16 @@ void EmployeeCardWindow::loadEmployee()
 
     updateHeader();
 
-    connect(positionComboBox, &QComboBox::currentTextChanged, this, [this](const QString&) {
+    connect(positionComboBox, &QComboBox::currentTextChanged, this, [this](const QString &) {
         updateHeader();
     });
-    connect(lastNameEdit, &QLineEdit::textChanged, this, [this](const QString&) {
+    connect(lastNameEdit, &QLineEdit::textChanged, this, [this](const QString &) {
         updateHeader();
     });
-    connect(firstNameEdit, &QLineEdit::textChanged, this, [this](const QString&) {
+    connect(firstNameEdit, &QLineEdit::textChanged, this, [this](const QString &) {
         updateHeader();
     });
-    connect(middleNameEdit, &QLineEdit::textChanged, this, [this](const QString&) {
+    connect(middleNameEdit, &QLineEdit::textChanged, this, [this](const QString &) {
         updateHeader();
     });
 }
@@ -262,7 +395,10 @@ void EmployeeCardWindow::updateHeader()
 
     const QStringList coveredPositions =
         DatabaseManager::instance().getCoveredPositionNamesByPositionName(currentBusinessId, position);
-    coveredPositionsLabel->setText(coveredPositions.isEmpty() ? "-" : coveredPositions.join(", "));
+    coveredPositionsLabel->setText(
+        coveredPositions.isEmpty()
+            ? "Может выполнять: -"
+            : QString("Может выполнять: %1").arg(coveredPositions.join(", ")));
 }
 
 void EmployeeCardWindow::setEditMode(bool enabled)
@@ -290,7 +426,7 @@ void EmployeeCardWindow::saveEmployee()
 {
     if (lastNameEdit->text().trimmed().isEmpty() || firstNameEdit->text().trimmed().isEmpty())
     {
-        QMessageBox::warning(this, "Ошибка", "Фамилия и имя сотрудника обязательны.");
+        showEmployeeWarning(this, "Ошибка", "Фамилия и имя сотрудника обязательны.");
         return;
     }
 
@@ -307,16 +443,15 @@ void EmployeeCardWindow::saveEmployee()
         statusComboBox->currentIndex() == 0,
         hiredDateEdit->date(),
         commentEdit->toPlainText(),
-        salaryRateEdit->text()
-        );
+        salaryRateEdit->text());
 
     if (!ok)
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить карточку сотрудника.");
+        showEmployeeError(this, "Ошибка", "Не удалось сохранить карточку сотрудника.");
         return;
     }
 
     updateHeader();
     setEditMode(false);
-    QMessageBox::information(this, "Сохранено", "Данные сотрудника обновлены.");
+    showEmployeeInfo(this, "Сохранено", "Данные сотрудника обновлены.");
 }

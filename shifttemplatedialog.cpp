@@ -2,6 +2,7 @@
 
 #include "databasemanager.h"
 
+#include <QAbstractButton>
 #include <QButtonGroup>
 #include <QCalendarWidget>
 #include <QCheckBox>

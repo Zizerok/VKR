@@ -523,6 +523,97 @@ void BusinessMainWindow::applyWindowStyles()
             background: #F8FAFF;
             border: 1px solid #D7DDF8;
         }
+        QPushButton#pushButtonStaffEmployeesView,
+        QPushButton#pushButtonStaffPositionsView {
+            min-height: 40px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 18px;
+            background: #F3F5FC;
+            color: #8181A5;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#pushButtonStaffEmployeesView:checked,
+        QPushButton#pushButtonStaffPositionsView:checked {
+            background: #EEF2FF;
+            color: #5E81F4;
+        }
+        QLabel#labelStaffContentTitle,
+        QLabel#labelEmployeeCount,
+        QLabel#labelPositionCount,
+        QLabel#labelSortTitle {
+            color: #1C1D21;
+        }
+        QLabel#labelStaffContentTitle {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QLabel#labelEmployeeCount,
+        QLabel#labelPositionCount,
+        QLabel#labelSortTitle {
+            font-size: 13px;
+            color: #8181A5;
+            font-weight: 600;
+        }
+        QComboBox#comboBoxEmployeeSort {
+            min-height: 38px;
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 12px;
+            padding: 0 12px;
+            color: #1C1D21;
+            font-size: 13px;
+        }
+        QPushButton#pushButtonAddEmployee,
+        QPushButton#pushButtonAddPosition,
+        QPushButton#pushButtonEditPosition,
+        QPushButton#pushButtonDeletePosition {
+            min-height: 40px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 16px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#pushButtonAddEmployee,
+        QPushButton#pushButtonAddPosition,
+        QPushButton#pushButtonEditPosition {
+            background: #5E81F4;
+            color: #FFFFFF;
+        }
+        QPushButton#pushButtonDeletePosition {
+            background: #FFF1F3;
+            color: #FF808B;
+            border: 1px solid #FFD8DE;
+        }
+        QListWidget#listWidgetEmployees,
+        QListWidget#listWidgetPositions {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 20px;
+            padding: 8px;
+        }
+        QListWidget#listWidgetEmployees::viewport,
+        QListWidget#listWidgetPositions::viewport {
+            background: transparent;
+            border: none;
+        }
+        QListWidget#listWidgetEmployees::item,
+        QListWidget#listWidgetPositions::item {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 14px;
+            padding: 12px;
+            margin: 4px 0;
+            color: #1C1D21;
+        }
+        QListWidget#listWidgetEmployees::item:selected,
+        QListWidget#listWidgetPositions::item:selected {
+            background: #EEF2FF;
+            border: 1px solid #5E81F4;
+            color: #1C1D21;
+        }
         QMenu {
             background: #FFFFFF;
             border: 1px solid #ECECF2;
@@ -1474,6 +1565,10 @@ void BusinessMainWindow::setupStaffSection()
 {
     ui->comboBoxEmployeeSort->addItem("ФИО: А-Я");
     ui->comboBoxEmployeeSort->addItem("ФИО: Я-А");
+    ui->listWidgetEmployees->setAlternatingRowColors(false);
+    ui->listWidgetEmployees->setFocusPolicy(Qt::NoFocus);
+    ui->listWidgetPositions->setAlternatingRowColors(false);
+    ui->listWidgetPositions->setFocusPolicy(Qt::NoFocus);
 
     connect(ui->pushButtonStaffEmployeesView, &QPushButton::clicked, this, [this]() {
         showStaffSubsection(0, "Список сотрудников");
@@ -1509,7 +1604,16 @@ void BusinessMainWindow::loadEmployees()
     int count = 0;
     while (query.next())
     {
-        auto *item = new QListWidgetItem(query.value("full_name").toString());
+        const QString fullName = query.value("full_name").toString();
+        const QString position = query.value("position").toString().trimmed();
+        const QString phone = query.value("phone").toString().trimmed();
+        QStringList lines;
+        lines << fullName;
+        lines << QString("Должность: %1").arg(position.isEmpty() ? "-" : position);
+        if (!phone.isEmpty())
+            lines << QString("Телефон: %1").arg(phone);
+
+        auto *item = new QListWidgetItem(lines.join("\n"));
         item->setData(Qt::UserRole, query.value("id").toInt());
         ui->listWidgetEmployees->addItem(item);
         ++count;
@@ -1539,9 +1643,9 @@ void BusinessMainWindow::loadPositions()
             : QString::number(salaryValue.toDouble(), 'f', 0);
         const QStringList coveredPositionNames = DatabaseManager::instance().getCoveredPositionNames(positionId);
 
-        QString text = QString("%1 | Оклад: %2").arg(name, salaryText);
+        QString text = QString("%1\nОклад: %2").arg(name, salaryText);
         if (!coveredPositionNames.isEmpty())
-            text += QString(" | Может заменить: %1").arg(coveredPositionNames.join(", "));
+            text += QString("\nМожет заменить: %1").arg(coveredPositionNames.join(", "));
 
         auto *item = new QListWidgetItem(text);
         item->setData(Qt::UserRole, positionId);
