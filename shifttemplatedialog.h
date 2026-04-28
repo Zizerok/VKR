@@ -2,6 +2,7 @@
 #define SHIFTTEMPLATEDIALOG_H
 
 #include <QDialog>
+#include <QMessageBox>
 
 class QButtonGroup;
 class QCheckBox;
@@ -29,12 +30,18 @@ private:
     QLabel *templateDetailsLabel = nullptr;
 
     void buildUi();
+    void applyStyles();
     void loadSourceShifts();
     void loadTemplates();
     void updateTemplateDetails();
     QListWidgetItem *currentSourceShiftItem() const;
     QListWidgetItem *currentTemplateItem() const;
     QList<QDate> buildApplyDates() const;
+    QString requestTemplateName(const QString &defaultName, bool *accepted = nullptr);
+    void showStyledInformation(const QString &title, const QString &text);
+    void showStyledWarning(const QString &title, const QString &text);
+    void showStyledError(const QString &title, const QString &text);
+    QMessageBox::StandardButton showStyledQuestion(const QString &title, const QString &text);
 
 private slots:
     void onSaveTemplateClicked();
