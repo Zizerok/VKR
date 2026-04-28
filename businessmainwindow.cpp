@@ -14,12 +14,17 @@
 #include <QColor>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QDoubleValidator>
+#include <QAbstractButton>
 #include <QFormLayout>
+#include <QFileInfo>
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QEventLoop>
 #include <QDateEdit>
 #include <QJsonArray>
@@ -31,27 +36,139 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QMap>
+#include <QMenu>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPalette>
 #include <QPushButton>
 #include <QGroupBox>
 #include <QScrollArea>
 #include <QSet>
+#include <QSize>
+#include <QSizePolicy>
 #include <QSqlQuery>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QTime>
+#include <QToolButton>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <QEvent>
 
 namespace
 {
+struct CalendarShiftVisual
+{
+    QString timeRange;
+    QString positionsText;
+    bool complete = false;
+};
+
+QString findAssetPath(const QString &fileName)
+{
+    const QStringList candidates = {
+        QDir::currentPath() + "/assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/../assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/../../assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/../../../assets/" + fileName,
+        "C:/Users/Dmitrii/Documents/VKR_2/assets/" + fileName
+    };
+
+    for (const QString &candidate : candidates)
+    {
+        if (QFileInfo::exists(candidate))
+            return QDir::cleanPath(candidate);
+    }
+
+    return QString();
+}
+
+QString buildCalendarCellHtml(int day,
+                              const QList<CalendarShiftVisual> &shiftLines,
+                              bool showQuestionIcon,
+                              const QString &questionIconPath)
+{
+    QString html =
+        "<div style='font-family:Segoe UI;color:#1C1D21;'>";
+
+    html += "<table width='100%' cellspacing='0' cellpadding='0' style='margin-bottom:4px;'>"
+            "<tr>"
+            "<td align='left' valign='top'>";
+    html += QString("<span style='font-size:15px;font-weight:700;'>%1</span>").arg(day);
+    html += "</td><td align='right' valign='top'>";
+
+    Q_UNUSED(questionIconPath);
+
+    if (showQuestionIcon)
+        html += "<span style='font-size:15px;font-weight:700;'>?</span>";
+
+    html += "</td></tr></table>";
+
+    for (const CalendarShiftVisual &line : shiftLines)
+    {
+        html += QString(
+                    "<div style='margin-bottom:5px;'>"
+                    "<span style='font-size:12px;font-weight:700;color:#1C1D21;line-height:1.25;"
+                    "background:%2;border:1px solid %1;border-radius:10px;"
+                    "padding:4px 7px;'>%3 | %4</span>"
+                    "</div>")
+                    .arg(line.complete ? "#7CCF9B" : "#FF808B",
+                         line.complete ? "#E7FAEF" : "#FFE8EC",
+                         line.timeRange.toHtmlEscaped(),
+                         line.positionsText.toHtmlEscaped());
+    }
+
+    html += "</div>";
+    return html;
+}
+
+void applyButtonIcon(QAbstractButton *button, const QString &fileName, const QSize &size = QSize(18, 18))
+{
+    if (!button)
+        return;
+
+    const QString path = findAssetPath(fileName);
+    if (path.isEmpty())
+        return;
+
+    button->setIcon(QIcon(path));
+    button->setIconSize(size);
+}
+
+QFrame *createKpiCard(const QString &title, QLabel **valueLabel, QWidget *parent)
+{
+    auto *card = new QFrame(parent);
+    card->setObjectName("shiftKpiCard");
+    auto *layout = new QVBoxLayout(card);
+    layout->setContentsMargins(14, 12, 14, 12);
+    layout->setSpacing(4);
+
+    auto *titleLabel = new QLabel(title, card);
+    titleLabel->setObjectName("shiftKpiTitleLabel");
+
+    auto *value = new QLabel("0", card);
+    value->setObjectName("shiftKpiValueLabel");
+
+    layout->addWidget(titleLabel);
+    layout->addWidget(value);
+    layout->addStretch();
+
+    if (valueLabel)
+        *valueLabel = value;
+
+    card->setMinimumHeight(78);
+    card->setMaximumHeight(86);
+
+    return card;
+}
+
 double parsePaymentNumber(const QString& text)
 {
     bool ok = false;
@@ -121,6 +238,8 @@ BusinessMainWindow::BusinessMainWindow(QWidget *parent)
     setupCommunicationSection();
     setupStatisticsSection();
     setupSettingsSection();
+    applyWindowStyles();
+    showMaximized();
     showSection(0, "Смены");
 }
 
@@ -139,6 +258,8 @@ BusinessMainWindow::BusinessMainWindow(int currentUserId, int businessId, QWidge
     setupCommunicationSection();
     setupStatisticsSection();
     setupSettingsSection();
+    applyWindowStyles();
+    showMaximized();
 
     ui->labelBusinessTitle->setText(DatabaseManager::instance().getBusinessName(businessId));
     showSection(0, "Смены");
@@ -147,6 +268,495 @@ BusinessMainWindow::BusinessMainWindow(int currentUserId, int businessId, QWidge
 BusinessMainWindow::~BusinessMainWindow()
 {
     delete ui;
+}
+
+bool BusinessMainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (shiftMonthTable && watched == shiftMonthTable->viewport() && event->type() == QEvent::Leave)
+    {
+        if (shiftMonthTooltipFrame)
+            shiftMonthTooltipFrame->hide();
+    }
+
+    if (watched && watched->property("shiftTooltipWidget").toBool())
+    {
+        const QString tooltipText = watched->property("shiftTooltipText").toString();
+
+        if (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove)
+        {
+            if (!tooltipText.trimmed().isEmpty() && shiftMonthTooltipFrame && shiftMonthTooltipLabel)
+            {
+                QWidget *widget = qobject_cast<QWidget *>(watched);
+                if (widget)
+                {
+                    shiftMonthTooltipLabel->setText(tooltipText.toHtmlEscaped().replace("\n", "<br>"));
+                    shiftMonthTooltipFrame->adjustSize();
+                    const QPoint globalPos = widget->mapToGlobal(QPoint(widget->width() - 6, 6));
+                    shiftMonthTooltipFrame->move(globalPos + QPoint(12, 4));
+                    shiftMonthTooltipFrame->show();
+                    shiftMonthTooltipFrame->raise();
+                }
+            }
+        }
+        else if (event->type() == QEvent::Leave)
+        {
+            if (shiftMonthTooltipFrame)
+                shiftMonthTooltipFrame->hide();
+        }
+    }
+
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void BusinessMainWindow::applyWindowStyles()
+{
+    if (!sectionSubtitleLabel)
+    {
+        sectionSubtitleLabel = new QLabel(this);
+        sectionSubtitleLabel->setObjectName("labelSectionSubtitle");
+        sectionSubtitleLabel->setWordWrap(true);
+        ui->contentLayout->insertWidget(1, sectionSubtitleLabel);
+    }
+
+    setStyleSheet(R"(
+        QMainWindow, QWidget#centralwidget {
+            background: #F6F6F6;
+        }
+        QFrame#sidebarFrame {
+            background: #FFFFFF;
+            border: none;
+        }
+        QFrame#contentFrame {
+            background: transparent;
+        }
+        QLabel#labelBusinessTitle {
+            color: #1C1D21;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        QLabel#labelCurrentSection {
+            color: #1C1D21;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        QLabel#labelSectionSubtitle {
+            color: #8181A5;
+            font-size: 14px;
+            padding-bottom: 4px;
+        }
+        QPushButton#pushButtonShifts,
+        QPushButton#pushButtonStaff,
+        QPushButton#pushButtonPayments,
+        QPushButton#pushButtonCommunication,
+        QPushButton#pushButtonSettings {
+            background: transparent;
+            color: #8181A5;
+            border: none;
+            border-radius: 16px;
+            text-align: left;
+            padding: 14px 16px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        QPushButton#pushButtonShifts:hover,
+        QPushButton#pushButtonStaff:hover,
+        QPushButton#pushButtonPayments:hover,
+        QPushButton#pushButtonCommunication:hover,
+        QPushButton#pushButtonSettings:hover {
+            background: #F3F5FC;
+            color: #1C1D21;
+        }
+        QPushButton#pushButtonShifts:checked,
+        QPushButton#pushButtonStaff:checked,
+        QPushButton#pushButtonPayments:checked,
+        QPushButton#pushButtonCommunication:checked,
+        QPushButton#pushButtonSettings:checked,
+        QPushButton#statisticsNavButton:checked {
+            background: #EEF2FF;
+            color: #5E81F4;
+        }
+        QPushButton#statisticsNavButton {
+            background: transparent;
+            color: #8181A5;
+            border: none;
+            border-radius: 16px;
+            text-align: left;
+            padding: 14px 16px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        QPushButton#statisticsNavButton:hover {
+            background: #F3F5FC;
+            color: #1C1D21;
+        }
+        QPushButton#pushButtonCreateShift,
+        QPushButton#pushButtonEditShift,
+        QPushButton#pushButtonDeleteShift,
+        QPushButton#shiftTemplatesButton,
+        QPushButton#pushButtonShiftArchiveToggle {
+            min-height: 42px;
+            border-radius: 14px;
+            padding: 0 16px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+        }
+        QPushButton#pushButtonCreateShift,
+        QPushButton#shiftTemplatesButton {
+            background: #5E81F4;
+            color: #FFFFFF;
+        }
+        QPushButton#pushButtonCreateShift:hover,
+        QPushButton#shiftTemplatesButton:hover {
+            background: #4C6FE0;
+        }
+        QPushButton#pushButtonEditShift,
+        QPushButton#pushButtonShiftArchiveToggle {
+            background: #E9EDFB;
+            color: #5E81F4;
+        }
+        QPushButton#pushButtonDeleteShift {
+            background: #FFF1F3;
+            color: #FF808B;
+        }
+        QPushButton#pushButtonShiftMonthView,
+        QPushButton#pushButtonShiftDayView,
+        QPushButton#pushButtonShiftListView {
+            min-height: 40px;
+            border: none;
+            border-radius: 14px;
+            padding: 0 18px;
+            background: #F3F5FC;
+            color: #8181A5;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#pushButtonShiftMonthView:checked,
+        QPushButton#pushButtonShiftDayView:checked,
+        QPushButton#pushButtonShiftListView:checked {
+            background: #EEF2FF;
+            color: #5E81F4;
+        }
+        QPushButton#pushButtonShiftPrevious,
+        QPushButton#pushButtonShiftNext,
+        QPushButton#pushButtonShiftToday,
+        QPushButton#shiftDayPreviousButton,
+        QPushButton#shiftDayNextButton {
+            min-height: 38px;
+            border: none;
+            border-radius: 12px;
+            padding: 0 14px;
+            background: #FFFFFF;
+            color: #8181A5;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#pushButtonShiftToday {
+            background: #F3F5FC;
+            color: #5E81F4;
+        }
+        QLabel#labelShiftCurrentPeriod,
+        QLabel#labelShiftContentTitle,
+        QLabel#shiftLegendLabel {
+            color: #1C1D21;
+        }
+        QLabel#labelShiftCurrentPeriod {
+            font-size: 20px;
+            font-weight: 700;
+        }
+        QLabel#labelShiftContentTitle {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QLabel#shiftLegendLabel {
+            font-size: 13px;
+            color: #8181A5;
+            padding: 4px 0 2px 0;
+        }
+        QFrame#shiftKpiCard, QFrame#shiftDayCard {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 20px;
+        }
+        QLabel#shiftKpiTitleLabel {
+            color: #8181A5;
+            font-size: 12px;
+        }
+        QLabel#shiftKpiValueLabel {
+            color: #1C1D21;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        QTableWidget {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 20px;
+            gridline-color: #F1F3F9;
+            padding: 6px;
+        }
+        QHeaderView::section {
+            background: #F8FAFF;
+            color: #8181A5;
+            border: none;
+            padding: 8px;
+            font-weight: 600;
+        }
+        QListWidget#listWidgetShiftList {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 20px;
+            padding: 8px;
+        }
+        QToolButton#shiftListFilterButton,
+        QToolButton#shiftListSortButton {
+            min-width: 38px;
+            max-width: 38px;
+            min-height: 38px;
+            max-height: 38px;
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 12px;
+            padding: 0;
+        }
+        QToolButton#shiftListFilterButton:hover,
+        QToolButton#shiftListSortButton:hover {
+            background: #F8FAFF;
+            border: 1px solid #D7DDF8;
+        }
+        QMenu {
+            background: #FFFFFF;
+            border: 1px solid #ECECF2;
+            border-radius: 12px;
+            padding: 6px;
+        }
+        QMenu::item {
+            padding: 8px 14px;
+            border-radius: 8px;
+            color: #1C1D21;
+        }
+        QMenu::item:selected {
+            background: #EEF2FF;
+            color: #5E81F4;
+        }
+        QListWidget#listWidgetShiftList::viewport {
+            background: transparent;
+            border: none;
+        }
+        QListWidget#listWidgetShiftList::item {
+            border: 1px solid #ECECF2;
+            border-radius: 14px;
+            margin: 4px 0;
+            padding: 12px;
+            background: #FFFFFF;
+        }
+        QListWidget#listWidgetShiftList::item:selected {
+            background: #EEF2FF;
+            border: 1px solid #5E81F4;
+            color: #1C1D21;
+        }
+        QLabel#labelShiftListCount,
+        QLabel#shiftDayCounterLabel {
+            color: #8181A5;
+            font-size: 14px;
+            font-weight: 600;
+        }
+    )");
+
+    applyNavigationIcons();
+}
+
+void BusinessMainWindow::applyNavigationIcons()
+{
+    applyButtonIcon(ui->pushButtonShifts, "free-icon-switch-job-10299045.png");
+    applyButtonIcon(ui->pushButtonStaff, "free-icon-user-1077114.png");
+    applyButtonIcon(ui->pushButtonPayments, "free-icon-paycheck-2476429.png");
+    applyButtonIcon(ui->pushButtonCommunication, "free-icon-bullhorn-8704449.png");
+    applyButtonIcon(ui->pushButtonSettings, "free-icon-gear-484613.png");
+    applyButtonIcon(statisticsNavButton, "free-icon-statistics-4563043.png");
+
+    applyButtonIcon(ui->pushButtonShiftPrevious, "free-icon-arrowhead-thin-outline-to-the-left-32542.png", QSize(14, 14));
+    applyButtonIcon(ui->pushButtonShiftNext, "free-icon-right-arrow-271228.png", QSize(14, 14));
+    applyButtonIcon(shiftDayPreviousButton, "free-icon-arrowhead-thin-outline-to-the-left-32542.png", QSize(14, 14));
+    applyButtonIcon(shiftDayNextButton, "free-icon-right-arrow-271228.png", QSize(14, 14));
+
+    ui->pushButtonShiftPrevious->setText("");
+    ui->pushButtonShiftNext->setText("");
+    if (shiftDayPreviousButton)
+        shiftDayPreviousButton->setText("");
+    if (shiftDayNextButton)
+        shiftDayNextButton->setText("");
+}
+
+QMessageBox::StandardButton BusinessMainWindow::showStyledQuestion(const QString& title, const QString& text)
+{
+    QMessageBox messageBox(this);
+    messageBox.setIcon(QMessageBox::Question);
+    messageBox.setWindowTitle(title);
+    messageBox.setText(title);
+    messageBox.setInformativeText(text);
+    messageBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    messageBox.setDefaultButton(QMessageBox::No);
+    messageBox.button(QMessageBox::Yes)->setText("Да");
+    messageBox.button(QMessageBox::No)->setText("Нет");
+    messageBox.setStyleSheet(R"(
+        QMessageBox {
+            background: #F6F6F6;
+        }
+        QMessageBox QLabel {
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QMessageBox QLabel#qt_msgbox_label {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QMessageBox QLabel#qt_msgbox_informativelabel {
+            color: #8181A5;
+            font-size: 13px;
+            min-width: 280px;
+        }
+        QMessageBox QPushButton {
+            min-width: 110px;
+            min-height: 40px;
+            border-radius: 12px;
+            border: none;
+            padding: 0 14px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QMessageBox QPushButton[text="Да"] {
+            background: #5E81F4;
+            color: #FFFFFF;
+        }
+        QMessageBox QPushButton[text="Нет"] {
+            background: #E9EDFB;
+            color: #5E81F4;
+        }
+    )");
+    return static_cast<QMessageBox::StandardButton>(messageBox.exec());
+}
+
+void BusinessMainWindow::showStyledInformation(const QString& title, const QString& text)
+{
+    QMessageBox messageBox(this);
+    messageBox.setIcon(QMessageBox::Information);
+    messageBox.setWindowTitle(title);
+    messageBox.setText(title);
+    messageBox.setInformativeText(text);
+    messageBox.setStandardButtons(QMessageBox::Ok);
+    messageBox.button(QMessageBox::Ok)->setText("Понятно");
+    messageBox.setStyleSheet(R"(
+        QMessageBox {
+            background: #F6F6F6;
+        }
+        QMessageBox QLabel {
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QMessageBox QLabel#qt_msgbox_label {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QMessageBox QLabel#qt_msgbox_informativelabel {
+            color: #8181A5;
+            font-size: 13px;
+            min-width: 280px;
+        }
+        QMessageBox QPushButton {
+            min-width: 120px;
+            min-height: 40px;
+            border-radius: 12px;
+            border: none;
+            padding: 0 14px;
+            font-size: 14px;
+            font-weight: 600;
+            background: #5E81F4;
+            color: #FFFFFF;
+        }
+    )");
+    messageBox.exec();
+}
+
+void BusinessMainWindow::showStyledWarning(const QString& title, const QString& text)
+{
+    QMessageBox messageBox(this);
+    messageBox.setIcon(QMessageBox::Warning);
+    messageBox.setWindowTitle(title);
+    messageBox.setText(title);
+    messageBox.setInformativeText(text);
+    messageBox.setStandardButtons(QMessageBox::Ok);
+    messageBox.button(QMessageBox::Ok)->setText("Понятно");
+    messageBox.setStyleSheet(R"(
+        QMessageBox {
+            background: #F6F6F6;
+        }
+        QMessageBox QLabel {
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QMessageBox QLabel#qt_msgbox_label {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QMessageBox QLabel#qt_msgbox_informativelabel {
+            color: #8181A5;
+            font-size: 13px;
+            min-width: 280px;
+        }
+        QMessageBox QPushButton {
+            min-width: 120px;
+            min-height: 40px;
+            border-radius: 12px;
+            border: none;
+            padding: 0 14px;
+            font-size: 14px;
+            font-weight: 600;
+            background: #F4B85E;
+            color: #FFFFFF;
+        }
+    )");
+    messageBox.exec();
+}
+
+void BusinessMainWindow::showStyledError(const QString& title, const QString& text)
+{
+    QMessageBox messageBox(this);
+    messageBox.setIcon(QMessageBox::Critical);
+    messageBox.setWindowTitle(title);
+    messageBox.setText(title);
+    messageBox.setInformativeText(text);
+    messageBox.setStandardButtons(QMessageBox::Ok);
+    messageBox.button(QMessageBox::Ok)->setText("Понятно");
+    messageBox.setStyleSheet(R"(
+        QMessageBox {
+            background: #F6F6F6;
+        }
+        QMessageBox QLabel {
+            color: #1C1D21;
+            font-size: 14px;
+        }
+        QMessageBox QLabel#qt_msgbox_label {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QMessageBox QLabel#qt_msgbox_informativelabel {
+            color: #8181A5;
+            font-size: 13px;
+            min-width: 280px;
+        }
+        QMessageBox QPushButton {
+            min-width: 120px;
+            min-height: 40px;
+            border-radius: 12px;
+            border: none;
+            padding: 0 14px;
+            font-size: 14px;
+            font-weight: 600;
+            background: #FF808B;
+            color: #FFFFFF;
+        }
+    )");
+    messageBox.exec();
 }
 
 void BusinessMainWindow::setupNavigation()
@@ -172,6 +782,24 @@ void BusinessMainWindow::showSection(int index, const QString& sectionTitle)
 {
     ui->stackedWidgetSections->setCurrentIndex(index);
     ui->labelCurrentSection->setText(sectionTitle);
+    if (sectionSubtitleLabel)
+    {
+        QString subtitle;
+        if (index == 0)
+            subtitle = "Планирование, просмотр и управление рабочими сменами.";
+        else if (index == 1)
+            subtitle = "Сотрудники, должности и кадровая информация предприятия.";
+        else if (index == 2)
+            subtitle = "Начисления, выплаты и расчёты по сменам.";
+        else if (index == 3)
+            subtitle = "Уведомления, отклики и работа с VK-ботом.";
+        else if (index == 4)
+            subtitle = "Ключевые показатели и аналитика по работе предприятия.";
+        else if (index == 5)
+            subtitle = "Параметры предприятия, связи с VK и служебные действия.";
+
+        sectionSubtitleLabel->setText(subtitle);
+    }
 
     if (index == 0)
         ui->pushButtonShifts->setChecked(true);
@@ -191,9 +819,12 @@ void BusinessMainWindow::setupShiftsSection()
 {
     setupShiftMonthCalendar();
     setupShiftDayView();
+    setupShiftListControls();
 
     shiftTemplatesButton = new QPushButton("Шаблоны смен", this);
+    shiftTemplatesButton->setObjectName("shiftTemplatesButton");
     ui->shiftHeaderLayout->insertWidget(3, shiftTemplatesButton);
+    setupShiftDashboardCards();
 
     connect(ui->pushButtonCreateShift, &QPushButton::clicked, this, &BusinessMainWindow::onCreateShiftClicked);
     connect(ui->pushButtonEditShift, &QPushButton::clicked, this, &BusinessMainWindow::onEditShiftClicked);
@@ -218,6 +849,89 @@ void BusinessMainWindow::setupShiftsSection()
     showShiftsSubsection(0, "Календарь смен на месяц");
 }
 
+void BusinessMainWindow::setupShiftDashboardCards()
+{
+    auto *kpiContainer = new QWidget(this);
+    auto *kpiLayout = new QHBoxLayout(kpiContainer);
+    kpiLayout->setContentsMargins(0, 0, 0, 0);
+    kpiLayout->setSpacing(10);
+    kpiLayout->addWidget(createKpiCard("Смен в периоде", &shiftKpiShiftsCountLabel, kpiContainer));
+    kpiLayout->addWidget(createKpiCard("Свободных позиций", &shiftKpiOpenPositionsLabel, kpiContainer));
+    kpiLayout->addWidget(createKpiCard("Назначено сотрудников", &shiftKpiAssignedEmployeesLabel, kpiContainer));
+    kpiLayout->addWidget(createKpiCard("Нужно закрыть", &shiftKpiNeedsAttentionLabel, kpiContainer));
+    kpiContainer->setMaximumHeight(92);
+
+    shiftLegendLabel = new QLabel(this);
+    shiftLegendLabel->setObjectName("shiftLegendLabel");
+    shiftLegendLabel->hide();
+
+    ui->verticalLayoutShifts->insertWidget(2, kpiContainer);
+    ui->verticalLayoutShifts->insertWidget(3, shiftLegendLabel);
+}
+
+void BusinessMainWindow::refreshShiftDashboard()
+{
+    if (!shiftKpiShiftsCountLabel)
+        return;
+
+    if (currentBusinessId < 0)
+    {
+        shiftKpiShiftsCountLabel->setText("0");
+        shiftKpiOpenPositionsLabel->setText("0");
+        shiftKpiAssignedEmployeesLabel->setText("0");
+        shiftKpiNeedsAttentionLabel->setText("0");
+        return;
+    }
+
+    QDate fromDate;
+    QDate toDate;
+
+    switch (ui->stackedWidgetShiftContent->currentIndex())
+    {
+    case 0:
+        fromDate = QDate(currentShiftDate.year(), currentShiftDate.month(), 1);
+        toDate = fromDate.addMonths(1).addDays(-1);
+        break;
+    case 1:
+        fromDate = currentShiftDate;
+        toDate = currentShiftDate;
+        break;
+    default:
+        fromDate = showingShiftArchive ? QDate(2000, 1, 1) : QDate::currentDate();
+        toDate = showingShiftArchive ? QDate::currentDate() : QDate::currentDate().addDays(30);
+        break;
+    }
+
+    int shiftCount = 0;
+    int openPositions = 0;
+    int assignedEmployees = 0;
+    int needsAttention = 0;
+
+    QSqlQuery query = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, fromDate, toDate);
+    while (query.next())
+    {
+        ++shiftCount;
+        const int shiftId = query.value("id").toInt();
+        const QList<ShiftAssignedEmployeeData> assignments = DatabaseManager::instance().getShiftAssignments(shiftId);
+        const QList<ShiftOpenPositionData> shiftOpenPositions = DatabaseManager::instance().getShiftOpenPositions(shiftId);
+
+        assignedEmployees += assignments.size();
+
+        int shiftOpenCount = 0;
+        for (const ShiftOpenPositionData &openPosition : shiftOpenPositions)
+            shiftOpenCount += openPosition.employeeCount;
+
+        openPositions += shiftOpenCount;
+        if (shiftOpenCount > 0)
+            ++needsAttention;
+    }
+
+    shiftKpiShiftsCountLabel->setText(QString::number(shiftCount));
+    shiftKpiOpenPositionsLabel->setText(QString::number(openPositions));
+    shiftKpiAssignedEmployeesLabel->setText(QString::number(assignedEmployees));
+    shiftKpiNeedsAttentionLabel->setText(QString::number(needsAttention));
+}
+
 void BusinessMainWindow::setupShiftMonthCalendar()
 {
     shiftMonthTable = new QTableWidget(5, 7, this);
@@ -225,6 +939,9 @@ void BusinessMainWindow::setupShiftMonthCalendar()
     shiftMonthTable->setSelectionMode(QAbstractItemView::NoSelection);
     shiftMonthTable->setFocusPolicy(Qt::NoFocus);
     shiftMonthTable->setWordWrap(true);
+    shiftMonthTable->setMouseTracking(true);
+    shiftMonthTable->viewport()->setMouseTracking(true);
+    shiftMonthTable->viewport()->installEventFilter(this);
     shiftMonthTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     shiftMonthTable->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     shiftMonthTable->verticalHeader()->setVisible(false);
@@ -233,6 +950,28 @@ void BusinessMainWindow::setupShiftMonthCalendar()
 
     for (int row = 0; row < shiftMonthTable->rowCount(); ++row)
         shiftMonthTable->setRowHeight(row, 110);
+
+    shiftMonthTooltipFrame = new QFrame(this, Qt::ToolTip | Qt::FramelessWindowHint);
+    shiftMonthTooltipFrame->setObjectName("shiftMonthTooltipFrame");
+    auto *tooltipLayout = new QVBoxLayout(shiftMonthTooltipFrame);
+    tooltipLayout->setContentsMargins(10, 8, 10, 8);
+    shiftMonthTooltipLabel = new QLabel(shiftMonthTooltipFrame);
+    shiftMonthTooltipLabel->setWordWrap(true);
+    shiftMonthTooltipLabel->setTextFormat(Qt::RichText);
+    tooltipLayout->addWidget(shiftMonthTooltipLabel);
+    shiftMonthTooltipFrame->setStyleSheet(
+        "QFrame#shiftMonthTooltipFrame {"
+        "background: #FFFFFF;"
+        "border: 1px solid #DDE3F4;"
+        "border-radius: 12px;"
+        "}"
+        "QFrame#shiftMonthTooltipFrame QLabel {"
+        "color: #1C1D21;"
+        "font-size: 12px;"
+        "background: transparent;"
+        "border: none;"
+        "}");
+    shiftMonthTooltipFrame->hide();
 
     ui->labelShiftMonthPlaceholder->hide();
     ui->verticalLayoutShiftMonth->addWidget(shiftMonthTable);
@@ -244,6 +983,9 @@ void BusinessMainWindow::setupShiftDayView()
     shiftDayPreviousButton = new QPushButton("<", this);
     shiftDayNextButton = new QPushButton(">", this);
     shiftDayCounterLabel = new QLabel("Смена 0 из 0", this);
+    shiftDayPreviousButton->setObjectName("shiftDayPreviousButton");
+    shiftDayNextButton->setObjectName("shiftDayNextButton");
+    shiftDayCounterLabel->setObjectName("shiftDayCounterLabel");
     shiftDayCounterLabel->setAlignment(Qt::AlignCenter);
 
     navigationLayout->addWidget(shiftDayPreviousButton);
@@ -251,6 +993,7 @@ void BusinessMainWindow::setupShiftDayView()
     navigationLayout->addWidget(shiftDayNextButton);
 
     auto *cardFrame = new QFrame(this);
+    cardFrame->setObjectName("shiftDayCard");
     auto *cardLayout = new QVBoxLayout(cardFrame);
     cardLayout->setSpacing(12);
 
@@ -305,6 +1048,76 @@ void BusinessMainWindow::setupShiftDayView()
     });
 }
 
+void BusinessMainWindow::setupShiftListControls()
+{
+    shiftListControlsWidget = new QWidget(this);
+    auto *controlsLayout = new QHBoxLayout(shiftListControlsWidget);
+    controlsLayout->setContentsMargins(0, 0, 0, 0);
+    controlsLayout->setSpacing(10);
+
+    controlsLayout->addStretch();
+
+    shiftListFilterButton = new QToolButton(shiftListControlsWidget);
+    shiftListFilterButton->setObjectName("shiftListFilterButton");
+    shiftListFilterButton->setPopupMode(QToolButton::InstantPopup);
+    shiftListFilterButton->setToolTip("Фильтр смен");
+    applyButtonIcon(shiftListFilterButton, "free-icon-filter-2676824.png", QSize(16, 16));
+
+    auto *filterMenu = new QMenu(shiftListFilterButton);
+    const QStringList filterItems = {
+        "Все смены",
+        "Только с открытыми позициями",
+        "Только укомплектованные"
+    };
+    for (int i = 0; i < filterItems.size(); ++i)
+    {
+        QAction *action = filterMenu->addAction(filterItems.at(i));
+        action->setCheckable(true);
+        action->setChecked(i == shiftListFilterMode);
+        connect(action, &QAction::triggered, this, [this, filterMenu, i]() {
+            shiftListFilterMode = i;
+            for (QAction *menuAction : filterMenu->actions())
+                menuAction->setChecked(false);
+            filterMenu->actions().at(i)->setChecked(true);
+            loadShiftList();
+        });
+    }
+    shiftListFilterButton->setMenu(filterMenu);
+
+    shiftListSortButton = new QToolButton(shiftListControlsWidget);
+    shiftListSortButton->setObjectName("shiftListSortButton");
+    shiftListSortButton->setPopupMode(QToolButton::InstantPopup);
+    shiftListSortButton->setToolTip("Сортировка смен");
+    applyButtonIcon(shiftListSortButton, "free-icon-filter-3839020.png", QSize(16, 16));
+
+    auto *sortMenu = new QMenu(shiftListSortButton);
+    const QStringList sortItems = {
+        "Сначала новые",
+        "Сначала старые",
+        "По времени начала"
+    };
+    for (int i = 0; i < sortItems.size(); ++i)
+    {
+        QAction *action = sortMenu->addAction(sortItems.at(i));
+        action->setCheckable(true);
+        action->setChecked(i == shiftListSortMode);
+        connect(action, &QAction::triggered, this, [this, sortMenu, i]() {
+            shiftListSortMode = i;
+            for (QAction *menuAction : sortMenu->actions())
+                menuAction->setChecked(false);
+            sortMenu->actions().at(i)->setChecked(true);
+            loadShiftList();
+        });
+    }
+    shiftListSortButton->setMenu(sortMenu);
+
+    controlsLayout->addWidget(shiftListFilterButton);
+    controlsLayout->addWidget(shiftListSortButton);
+
+    ui->shiftContentHeaderLayout->insertWidget(2, shiftListControlsWidget);
+    shiftListControlsWidget->hide();
+}
+
 void BusinessMainWindow::showShiftsSubsection(int index, const QString& title)
 {
     ui->stackedWidgetShiftContent->setCurrentIndex(index);
@@ -333,9 +1146,14 @@ void BusinessMainWindow::showShiftsSubsection(int index, const QString& title)
     ui->labelShiftContentTitle->setText(index == 2
         ? (showingShiftArchive ? "Архив смен" : "Список смен")
         : title);
+    if (shiftLegendLabel)
+        shiftLegendLabel->hide();
+    if (shiftListControlsWidget)
+        shiftListControlsWidget->setVisible(index == 2);
 
     updateShiftListMode();
     updateShiftPeriodLabel();
+    refreshShiftDashboard();
 }
 
 void BusinessMainWindow::updateShiftPeriodLabel()
@@ -364,14 +1182,28 @@ void BusinessMainWindow::loadShiftMonthCalendar()
     shiftMonthTable->setRowCount(requiredRows);
     for (int row = 0; row < requiredRows; ++row)
         shiftMonthTable->setRowHeight(row, 110);
+
+    for (int row = 0; row < shiftMonthTable->rowCount(); ++row)
+    {
+        for (int column = 0; column < shiftMonthTable->columnCount(); ++column)
+        {
+            QWidget *existingWidget = shiftMonthTable->cellWidget(row, column);
+            if (existingWidget)
+            {
+                shiftMonthTable->removeCellWidget(row, column);
+                existingWidget->deleteLater();
+            }
+        }
+    }
+
     shiftMonthTable->clearContents();
 
     if (currentBusinessId < 0)
         return;
 
-    QMap<QDate, QStringList> shiftsByDate;
-    QMap<QDate, bool> hasShiftsByDate;
-    QMap<QDate, bool> hasOpenPositionsByDate;
+    const QString questionIconPath = findAssetPath("free-icon-question-1828940.png");
+
+    QMap<QDate, QList<CalendarShiftVisual>> shiftsByDate;
     QSqlQuery query = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, firstDay, lastDay);
     while (query.next())
     {
@@ -387,16 +1219,15 @@ void BusinessMainWindow::loadShiftMonthCalendar()
         const QList<ShiftOpenPositionData> openPositions = DatabaseManager::instance().getShiftOpenPositions(shiftId);
         for (const ShiftOpenPositionData& openPosition : openPositions)
             positions.insert(openPosition.positionName);
-
-        hasShiftsByDate[shiftDate] = true;
-        if (!openPositions.isEmpty())
-            hasOpenPositionsByDate[shiftDate] = true;
+        const bool shiftComplete = openPositions.isEmpty();
 
         QStringList sortedPositions = positions.values();
         std::sort(sortedPositions.begin(), sortedPositions.end());
-        shiftsByDate[shiftDate].append(sortedPositions.isEmpty()
-            ? timeRange
-            : QString("%1 | %2").arg(timeRange, sortedPositions.join(", ")));
+        CalendarShiftVisual visual;
+        visual.complete = shiftComplete;
+        visual.timeRange = timeRange;
+        visual.positionsText = sortedPositions.isEmpty() ? QString("Без ролей") : sortedPositions.join(", ");
+        shiftsByDate[shiftDate].append(visual);
     }
 
     for (int day = 1; day <= lastDay.day(); ++day)
@@ -408,50 +1239,57 @@ void BusinessMainWindow::loadShiftMonthCalendar()
 
         QStringList lines;
         lines << QString::number(day);
-        const QStringList shiftLines = shiftsByDate.value(cellDate);
-        lines.append(shiftLines);
+        const QList<CalendarShiftVisual> shiftLines = shiftsByDate.value(cellDate);
+        for (const CalendarShiftVisual &line : shiftLines)
+            lines << QString("%1 | %2").arg(line.timeRange, line.positionsText);
 
         const QString fullText = lines.join("\n");
-        QString displayText = fullText;
+        QList<CalendarShiftVisual> visibleShiftLines = shiftLines;
         bool tooltipOnly = false;
 
-        if (shiftLines.size() > 2)
+        if (shiftLines.size() > 1)
         {
-            displayText = QString::number(day) + "\n" + shiftLines.first() + "\nⓘ";
+            visibleShiftLines = {shiftLines.first()};
             tooltipOnly = true;
         }
         else if (fullText.length() > 70)
         {
-            displayText = QString::number(day) + "\nⓘ";
+            visibleShiftLines = shiftLines.isEmpty() ? QList<CalendarShiftVisual>() : QList<CalendarShiftVisual>{shiftLines.first()};
             tooltipOnly = true;
         }
 
-        auto *item = new QTableWidgetItem(displayText);
+        auto *item = new QTableWidgetItem();
         item->setTextAlignment(Qt::AlignLeft | Qt::AlignTop);
         item->setFlags(Qt::ItemIsEnabled);
-        item->setToolTip(tooltipOnly ? fullText : QString());
+        item->setToolTip(QString());
 
         const bool isToday = (cellDate == QDate::currentDate());
-        const bool hasShifts = hasShiftsByDate.value(cellDate, false);
-        const bool hasOpenPositions = hasOpenPositionsByDate.value(cellDate, false);
-
         if (isToday)
         {
-            item->setBackground(QColor(255, 243, 205));
-        }
-        else if (hasShifts && cellDate < QDate::currentDate())
-        {
-            item->setBackground(QColor(226, 232, 240));
-        }
-        else if (hasShifts && cellDate > QDate::currentDate())
-        {
-            item->setBackground(hasOpenPositions
-                ? QColor(254, 226, 226)
-                : QColor(220, 252, 231));
+            item->setBackground(QColor("#FFFFFF"));
+            item->setData(Qt::UserRole, QColor("#F4BE5E"));
         }
 
         shiftMonthTable->setItem(row, column, item);
+
+        auto *cellLabel = new QLabel(shiftMonthTable);
+        cellLabel->setTextFormat(Qt::RichText);
+        cellLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        cellLabel->setWordWrap(true);
+        cellLabel->setMargin(4);
+        cellLabel->setText(buildCalendarCellHtml(day, visibleShiftLines, tooltipOnly, questionIconPath));
+        cellLabel->setStyleSheet(isToday
+            ? "background: transparent; border: 2px solid #F4BE5E; border-radius: 12px;"
+            : "background: transparent; border: none;");
+        cellLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        cellLabel->setProperty("shiftTooltipWidget", tooltipOnly);
+        cellLabel->setProperty("shiftTooltipText", tooltipOnly ? fullText : QString());
+        cellLabel->setMouseTracking(true);
+        cellLabel->installEventFilter(this);
+        shiftMonthTable->setCellWidget(row, column, cellLabel);
     }
+
+    refreshShiftDashboard();
 }
 
 void BusinessMainWindow::loadShiftDayView()
@@ -467,6 +1305,7 @@ void BusinessMainWindow::loadShiftDayView()
     }
 
     showCurrentDayShift();
+    refreshShiftDashboard();
 }
 
 void BusinessMainWindow::showCurrentDayShift()
@@ -526,6 +1365,8 @@ void BusinessMainWindow::updateShiftListMode()
 void BusinessMainWindow::loadShiftList()
 {
     ui->listWidgetShiftList->clear();
+    ui->listWidgetShiftList->setAlternatingRowColors(false);
+    ui->listWidgetShiftList->setFocusPolicy(Qt::NoFocus);
 
     if (currentBusinessId < 0)
     {
@@ -537,7 +1378,16 @@ void BusinessMainWindow::loadShiftList()
         ? DatabaseManager::instance().getAllShifts(currentBusinessId)
         : DatabaseManager::instance().getShiftsForList(currentBusinessId, QDate::currentDate());
 
-    int count = 0;
+    struct ShiftListItemData
+    {
+        int shiftId = -1;
+        QDate shiftDate;
+        QString startTime;
+        QString displayText;
+        bool hasOpenPositions = false;
+    };
+
+    QList<ShiftListItemData> items;
     while (query.next())
     {
         const int shiftId = query.value("id").toInt();
@@ -549,25 +1399,75 @@ void BusinessMainWindow::loadShiftList()
         QStringList lines;
         lines << QString("%1 | %2 | %3")
                      .arg(shiftDate.toString("dd.MM.yyyy"), timeRange, query.value("status").toString());
-        lines << QString("Назначены: %1")
-                     .arg(DatabaseManager::instance().getShiftAssignedSummary(shiftId).join("; "));
-        lines << QString("Свободные позиции: %1")
-                     .arg(DatabaseManager::instance().getShiftOpenPositionsSummary(shiftId).join("; "));
+        const QString assignedSummary = DatabaseManager::instance().getShiftAssignedSummary(shiftId).join("; ");
+        const QString openPositionsSummary = DatabaseManager::instance().getShiftOpenPositionsSummary(shiftId).join("; ");
+        lines << QString("Назначены: %1").arg(assignedSummary.isEmpty() ? "-" : assignedSummary);
+        lines << QString("Свободные позиции: %1").arg(openPositionsSummary.isEmpty() ? "-" : openPositionsSummary);
 
         const QString comment = query.value("comment").toString().trimmed();
         if (!comment.isEmpty())
             lines << QString("Комментарий: %1").arg(comment);
 
-        auto *item = new QListWidgetItem(lines.join("\n"));
-        item->setData(Qt::UserRole, shiftId);
+        ShiftListItemData itemData;
+        itemData.shiftId = shiftId;
+        itemData.shiftDate = shiftDate;
+        itemData.startTime = query.value("start_time").toString();
+        itemData.displayText = lines.join("\n");
+        itemData.hasOpenPositions = !openPositionsSummary.isEmpty();
+        items.append(itemData);
+    }
+
+    if (shiftListFilterButton)
+    {
+        const int filterIndex = shiftListFilterMode;
+        QList<ShiftListItemData> filteredItems;
+        for (const ShiftListItemData &itemData : std::as_const(items))
+        {
+            const bool keep = (filterIndex == 0)
+                || (filterIndex == 1 && itemData.hasOpenPositions)
+                || (filterIndex == 2 && !itemData.hasOpenPositions);
+            if (keep)
+                filteredItems.append(itemData);
+        }
+        items = filteredItems;
+    }
+
+    if (shiftListSortButton)
+    {
+        const int sortIndex = shiftListSortMode;
+        std::sort(items.begin(), items.end(), [sortIndex](const ShiftListItemData &left, const ShiftListItemData &right) {
+            if (sortIndex == 1)
+            {
+                if (left.shiftDate != right.shiftDate)
+                    return left.shiftDate < right.shiftDate;
+                return left.startTime < right.startTime;
+            }
+            if (sortIndex == 2)
+            {
+                if (left.startTime != right.startTime)
+                    return left.startTime < right.startTime;
+                return left.shiftDate > right.shiftDate;
+            }
+
+            if (left.shiftDate != right.shiftDate)
+                return left.shiftDate > right.shiftDate;
+            return left.startTime > right.startTime;
+        });
+    }
+
+    for (const ShiftListItemData &itemData : std::as_const(items))
+    {
+        auto *item = new QListWidgetItem(itemData.displayText);
+        item->setData(Qt::UserRole, itemData.shiftId);
         ui->listWidgetShiftList->addItem(item);
-        ++count;
     }
 
     ui->labelShiftListCount->setText(
         showingShiftArchive
-            ? QString("Смен в архиве: %1").arg(count)
-            : QString("Актуальных смен: %1").arg(count));
+            ? QString("Смен в архиве: %1").arg(items.size())
+            : QString("Актуальных смен: %1").arg(items.size()));
+
+    refreshShiftDashboard();
 }
 
 void BusinessMainWindow::setupStaffSection()
@@ -1012,6 +1912,7 @@ void BusinessMainWindow::loadShiftResponses()
 void BusinessMainWindow::setupStatisticsSection()
 {
     statisticsNavButton = new QPushButton("Статистика", this);
+    statisticsNavButton->setObjectName("statisticsNavButton");
     statisticsNavButton->setCheckable(true);
     statisticsNavButton->setAutoExclusive(true);
     ui->sidebarLayout->insertWidget(6, statisticsNavButton);
@@ -1165,7 +2066,7 @@ void BusinessMainWindow::loadStatisticsSection()
     const QDate endDate = statisticsEndDateEdit->date();
     if (!startDate.isValid() || !endDate.isValid() || startDate > endDate)
     {
-        QMessageBox::warning(this, "Статистика", "Проверьте выбранный период.");
+        showStyledWarning("Статистика", "Проверьте выбранный период.");
         return;
     }
 
@@ -1960,14 +2861,14 @@ void BusinessMainWindow::onEditShiftClicked()
 {
     if (ui->stackedWidgetShiftContent->currentIndex() != 2)
     {
-        QMessageBox::information(this, "Смены", "Редактирование доступно в режиме списка.");
+        showStyledInformation("Смены", "Редактирование доступно в режиме списка.");
         return;
     }
 
     QListWidgetItem *item = ui->listWidgetShiftList->currentItem();
     if (!item)
     {
-        QMessageBox::information(this, "Смены", "Сначала выберите смену для редактирования.");
+        showStyledInformation("Смены", "Сначала выберите смену для редактирования.");
         return;
     }
 
@@ -1986,23 +2887,23 @@ void BusinessMainWindow::onDeleteShiftClicked()
 {
     if (ui->stackedWidgetShiftContent->currentIndex() != 2)
     {
-        QMessageBox::information(this, "Смены", "Удаление доступно в режиме списка.");
+        showStyledInformation("Смены", "Удаление доступно в режиме списка.");
         return;
     }
 
     QListWidgetItem *item = ui->listWidgetShiftList->currentItem();
     if (!item)
     {
-        QMessageBox::information(this, "Смены", "Сначала выберите смену для удаления.");
+        showStyledInformation("Смены", "Сначала выберите смену для удаления.");
         return;
     }
 
-    if (QMessageBox::question(this, "Удаление смены", "Удалить выбранную смену?") != QMessageBox::Yes)
+    if (showStyledQuestion("Удаление смены", "Удалить выбранную смену?") != QMessageBox::Yes)
         return;
 
     if (!DatabaseManager::instance().deleteShift(item->data(Qt::UserRole).toInt()))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось удалить смену.");
+        showStyledError("Ошибка", "Не удалось удалить смену.");
         return;
     }
 
@@ -2060,7 +2961,7 @@ void BusinessMainWindow::onAddPositionClicked()
 
     if (dialog.positionName().isEmpty())
     {
-        QMessageBox::warning(this, "Ошибка", "Заполните наименование должности.");
+        showStyledWarning("Ошибка", "Заполните наименование должности.");
         return;
     }
 
@@ -2070,7 +2971,7 @@ void BusinessMainWindow::onAddPositionClicked()
             dialog.salaryText(),
             dialog.coveredPositionIds()))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось добавить должность.");
+        showStyledError("Ошибка", "Не удалось добавить должность.");
         return;
     }
 
@@ -2083,7 +2984,7 @@ void BusinessMainWindow::onEditPositionClicked()
     QListWidgetItem *item = ui->listWidgetPositions->currentItem();
     if (!item)
     {
-        QMessageBox::information(this, "Должности", "Сначала выберите должность для редактирования.");
+        showStyledInformation("Должности", "Сначала выберите должность для редактирования.");
         return;
     }
 
@@ -2093,7 +2994,7 @@ void BusinessMainWindow::onEditPositionClicked()
 
     if (dialog.positionName().isEmpty())
     {
-        QMessageBox::warning(this, "Ошибка", "Заполните наименование должности.");
+        showStyledWarning("Ошибка", "Заполните наименование должности.");
         return;
     }
 
@@ -2103,7 +3004,7 @@ void BusinessMainWindow::onEditPositionClicked()
             dialog.salaryText(),
             dialog.coveredPositionIds()))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось изменить должность.");
+        showStyledError("Ошибка", "Не удалось изменить должность.");
         return;
     }
 
@@ -2116,19 +3017,18 @@ void BusinessMainWindow::onDeletePositionClicked()
     QListWidgetItem *item = ui->listWidgetPositions->currentItem();
     if (!item)
     {
-        QMessageBox::information(this, "Должности", "Сначала выберите должность для удаления.");
+        showStyledInformation("Должности", "Сначала выберите должность для удаления.");
         return;
     }
 
-    if (QMessageBox::question(
-            this,
+    if (showStyledQuestion(
             "Удаление должности",
             QString("Удалить должность \"%1\"?").arg(item->text())) != QMessageBox::Yes)
         return;
 
     if (!DatabaseManager::instance().deletePosition(item->data(Qt::UserRole).toInt()))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось удалить должность.");
+        showStyledError("Ошибка", "Не удалось удалить должность.");
         return;
     }
 
@@ -2206,20 +3106,20 @@ void BusinessMainWindow::onSavePaymentRevenueClicked()
     const int row = selectedPaymentItem ? selectedPaymentItem->data(Qt::UserRole + 1).toInt() : -1;
     if (row < 0 || row >= currentPaymentItems.size())
     {
-        QMessageBox::information(this, "Выплаты", "Сначала выберите смену.");
+        showStyledInformation("Выплаты", "Сначала выберите смену.");
         return;
     }
 
     const ShiftPaymentInfo &payment = currentPaymentItems.at(row);
     if (!paymentNeedsRevenue(payment))
     {
-        QMessageBox::information(this, "Выплаты", "Для этой схемы оплаты выручка не требуется.");
+        showStyledInformation("Выплаты", "Для этой схемы оплаты выручка не требуется.");
         return;
     }
 
     if (!DatabaseManager::instance().updateShiftAssignmentRevenue(payment.assignmentId, paymentsRevenueEdit->text()))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить выручку.");
+        showStyledError("Ошибка", "Не удалось сохранить выручку.");
         return;
     }
 
@@ -2248,7 +3148,7 @@ void BusinessMainWindow::onMarkPaymentPaidClicked()
     QListWidgetItem *item = paymentsShiftListWidget->currentItem();
     if (!item)
     {
-        QMessageBox::information(this, "Выплаты", "Сначала выберите смену для отметки оплаты.");
+        showStyledInformation("Выплаты", "Сначала выберите смену для отметки оплаты.");
         return;
     }
 
@@ -2258,14 +3158,14 @@ void BusinessMainWindow::onMarkPaymentPaidClicked()
         const ShiftPaymentInfo &payment = currentPaymentItems.at(row);
         if (paymentNeedsRevenue(payment) && payment.revenueAmount.trimmed().isEmpty())
         {
-            QMessageBox::information(this, "Выплаты", "Сначала укажите выручку для этой смены.");
+            showStyledInformation("Выплаты", "Сначала укажите выручку для этой смены.");
             return;
         }
     }
 
     if (!DatabaseManager::instance().markShiftAssignmentPaid(item->data(Qt::UserRole).toInt()))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось отметить оплату смены.");
+        showStyledError("Ошибка", "Не удалось отметить оплату смены.");
         return;
     }
 
@@ -2294,7 +3194,7 @@ void BusinessMainWindow::onMarkAllPaymentsPaidClicked()
     QListWidgetItem *item = paymentsEmployeeListWidget->currentItem();
     if (!item)
     {
-        QMessageBox::information(this, "Выплаты", "Сначала выберите сотрудника.");
+        showStyledInformation("Выплаты", "Сначала выберите сотрудника.");
         return;
     }
 
@@ -2303,14 +3203,14 @@ void BusinessMainWindow::onMarkAllPaymentsPaidClicked()
     {
         if (!payment.isPaid && paymentNeedsRevenue(payment) && payment.revenueAmount.trimmed().isEmpty())
         {
-            QMessageBox::information(this, "Выплаты", "Укажите выручку для всех процентных смен перед массовой оплатой.");
+            showStyledInformation("Выплаты", "Укажите выручку для всех процентных смен перед массовой оплатой.");
             return;
         }
     }
 
     if (!DatabaseManager::instance().markAllEmployeeAssignmentsPaid(currentBusinessId, employeeId))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось отметить все выплаты как оплаченные.");
+        showStyledError("Ошибка", "Не удалось отметить все выплаты как оплаченные.");
         return;
     }
 
@@ -2338,7 +3238,7 @@ void BusinessMainWindow::onSendMessageClicked()
 
     if (isNewShiftMessage && shiftId <= 0)
     {
-        QMessageBox::warning(this, "Коммуникация", "Нет смен без уведомления. Создайте новую смену или выберите другой тип сообщения.");
+        showStyledWarning("Коммуникация", "Нет смен без уведомления. Создайте новую смену или выберите другой тип сообщения.");
         return;
     }
 
@@ -2351,7 +3251,7 @@ void BusinessMainWindow::onSendMessageClicked()
 
     if (messageText.isEmpty())
     {
-        QMessageBox::warning(this, "Коммуникация", "Введите текст сообщения.");
+        showStyledWarning("Коммуникация", "Введите текст сообщения.");
         return;
     }
 
@@ -2365,7 +3265,7 @@ void BusinessMainWindow::onSendMessageClicked()
     {
         if (messageEmployeeComboBox->currentText().trimmed().isEmpty())
         {
-            QMessageBox::warning(this, "Коммуникация", "Выберите сотрудника.");
+            showStyledWarning("Коммуникация", "Выберите сотрудника.");
             return;
         }
         recipientCode = "employee";
@@ -2376,7 +3276,7 @@ void BusinessMainWindow::onSendMessageClicked()
     {
         if (messagePositionComboBox->currentText().trimmed().isEmpty())
         {
-            QMessageBox::warning(this, "Коммуникация", "Выберите должность.");
+            showStyledWarning("Коммуникация", "Выберите должность.");
             return;
         }
         recipientCode = "position";
@@ -2402,7 +3302,7 @@ void BusinessMainWindow::onSendMessageClicked()
 
         if (vkIds.isEmpty() && assignedVkIdsForShift.isEmpty())
         {
-            QMessageBox::warning(this, "Коммуникация", "Нет подходящих сотрудников с VK ID.");
+            showStyledWarning("Коммуникация", "Нет подходящих сотрудников с VK ID.");
             return;
         }
 
@@ -2462,10 +3362,9 @@ void BusinessMainWindow::onSendMessageClicked()
             if (reply->error() != QNetworkReply::NoError || httpStatus < 200 || httpStatus >= 300)
             {
                 sendStatus = "Ошибка VK";
-                QMessageBox::warning(
-                    this,
+                showStyledWarning(
                     "VK backend",
-                    QString("Backend РЅРµ СЃРјРѕРі РѕС‚РїСЂР°РІРёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёРµ.\n%1")
+                    QString("Backend не смог отправить уведомление.\n%1")
                         .arg(QString::fromUtf8(responseBody).isEmpty()
                                  ? reply->errorString()
                                  : QString::fromUtf8(responseBody))
@@ -2498,7 +3397,7 @@ void BusinessMainWindow::onSendMessageClicked()
         {
             reply->abort();
             sendStatus = "Ошибка VK";
-            QMessageBox::warning(this, "VK backend", "Backend не ответил за 15 секунд. Проверьте, что uvicorn запущен.");
+            showStyledWarning("VK backend", "Backend не ответил за 15 секунд. Проверьте, что uvicorn запущен.");
         }
 
         reply->deleteLater();
@@ -2554,7 +3453,7 @@ void BusinessMainWindow::onSendMessageClicked()
             "VK",
             "Ожидает VK"))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить уведомление.");
+        showStyledError("Ошибка", "Не удалось сохранить уведомление.");
         return;
     }
 
@@ -2594,7 +3493,7 @@ void BusinessMainWindow::onSaveVkSettingsClicked()
 
     if (!DatabaseManager::instance().saveVkSettings(currentBusinessId, settings))
     {
-        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить настройки VK.");
+        showStyledError("Ошибка", "Не удалось сохранить настройки VK.");
         return;
     }
 

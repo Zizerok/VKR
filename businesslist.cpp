@@ -63,6 +63,8 @@ void BusinessList::applyStyles()
 {
     setModal(true);
     setMinimumSize(1040, 680);
+    ui->listWidget_business->setAlternatingRowColors(false);
+    ui->listWidget_business->setFocusPolicy(Qt::NoFocus);
 
     setStyleSheet(R"(
         QDialog {
@@ -96,6 +98,10 @@ void BusinessList::applyStyles()
             border: none;
             outline: none;
             padding: 4px;
+        }
+        QListWidget#listWidget_business::viewport {
+            background: transparent;
+            border: none;
         }
         QListWidget#listWidget_business::item {
             background: #FFFFFF;

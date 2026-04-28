@@ -5,6 +5,7 @@
 #include <QList>
 #include <QListWidgetItem>
 #include <QMainWindow>
+#include <QMessageBox>
 #include <QString>
 
 #include "databasemanager.h"
@@ -20,6 +21,7 @@ class QLineEdit;
 class QTabWidget;
 class QCheckBox;
 class QWidget;
+class QToolButton;
 class StatisticsChartWidget;
 
 namespace Ui {
@@ -34,6 +36,7 @@ public:
     explicit BusinessMainWindow(QWidget *parent = nullptr);
     BusinessMainWindow(int currentUserId, int businessId, QWidget *parent);
     ~BusinessMainWindow();
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     Ui::BusinessMainWindow *ui;
@@ -46,6 +49,15 @@ private:
     QList<int> currentDayShiftIds;
     QLabel *shiftDayCounterLabel = nullptr;
     QPushButton *shiftTemplatesButton = nullptr;
+    QLabel *sectionSubtitleLabel = nullptr;
+    QLabel *shiftKpiShiftsCountLabel = nullptr;
+    QLabel *shiftKpiOpenPositionsLabel = nullptr;
+    QLabel *shiftKpiAssignedEmployeesLabel = nullptr;
+    QLabel *shiftKpiNeedsAttentionLabel = nullptr;
+    QLabel *shiftLegendLabel = nullptr;
+    QWidget *shiftListControlsWidget = nullptr;
+    QFrame *shiftMonthTooltipFrame = nullptr;
+    QLabel *shiftMonthTooltipLabel = nullptr;
     QPushButton *shiftDayPreviousButton = nullptr;
     QPushButton *shiftDayNextButton = nullptr;
     QLabel *shiftDayTimeLabel = nullptr;
@@ -53,6 +65,10 @@ private:
     QLabel *shiftDayAssignedLabel = nullptr;
     QLabel *shiftDayOpenPositionsLabel = nullptr;
     QLabel *shiftDayCommentLabel = nullptr;
+    QToolButton *shiftListFilterButton = nullptr;
+    QToolButton *shiftListSortButton = nullptr;
+    int shiftListFilterMode = 0;
+    int shiftListSortMode = 0;
     QListWidget *paymentsEmployeeListWidget = nullptr;
     QListWidget *paymentsShiftListWidget = nullptr;
     QLabel *paymentsSummaryLabel = nullptr;
@@ -100,11 +116,20 @@ private:
     QLabel *vkConnectionStatusLabel = nullptr;
 
     void setupNavigation();
+    void applyWindowStyles();
+    void applyNavigationIcons();
+    QMessageBox::StandardButton showStyledQuestion(const QString& title, const QString& text);
+    void showStyledInformation(const QString& title, const QString& text);
+    void showStyledWarning(const QString& title, const QString& text);
+    void showStyledError(const QString& title, const QString& text);
     void showSection(int index, const QString& sectionTitle);
 
     void setupShiftsSection();
+    void setupShiftDashboardCards();
+    void refreshShiftDashboard();
     void setupShiftMonthCalendar();
     void setupShiftDayView();
+    void setupShiftListControls();
     void showShiftsSubsection(int index, const QString& title);
     void updateShiftPeriodLabel();
     void loadShiftMonthCalendar();
