@@ -13,6 +13,7 @@
 class QTableWidget;
 class QComboBox;
 class QDateEdit;
+class QFrame;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -22,6 +23,7 @@ class QTabWidget;
 class QCheckBox;
 class QWidget;
 class QToolButton;
+class QVBoxLayout;
 class StatisticsChartWidget;
 
 namespace Ui {
@@ -54,10 +56,19 @@ private:
     QLabel *shiftKpiOpenPositionsLabel = nullptr;
     QLabel *shiftKpiAssignedEmployeesLabel = nullptr;
     QLabel *shiftKpiNeedsAttentionLabel = nullptr;
+    QLabel *shiftKpiShiftsSubtitleLabel = nullptr;
+    QLabel *shiftKpiEmployeesSubtitleLabel = nullptr;
+    QLabel *shiftKpiResponsesSubtitleLabel = nullptr;
+    QLabel *shiftKpiPaymentsSubtitleLabel = nullptr;
     QLabel *shiftLegendLabel = nullptr;
+    QLabel *sidebarUserNameLabel = nullptr;
+    QLabel *sidebarUserRoleLabel = nullptr;
     QWidget *shiftListControlsWidget = nullptr;
     QFrame *shiftMonthTooltipFrame = nullptr;
     QLabel *shiftMonthTooltipLabel = nullptr;
+    QLabel *shiftMonthDetailsDateLabel = nullptr;
+    QLabel *shiftMonthDetailsBadgeLabel = nullptr;
+    QVBoxLayout *shiftMonthDetailsListLayout = nullptr;
     QPushButton *shiftDayPreviousButton = nullptr;
     QPushButton *shiftDayNextButton = nullptr;
     QLabel *shiftDayTimeLabel = nullptr;
@@ -117,6 +128,7 @@ private:
     QLabel *vkConnectionStatusLabel = nullptr;
 
     void setupNavigation();
+    void setupSidebarUserCard();
     void applyWindowStyles();
     void applyNavigationIcons();
     QMessageBox::StandardButton showStyledQuestion(const QString& title, const QString& text);
@@ -134,6 +146,7 @@ private:
     void showShiftsSubsection(int index, const QString& title);
     void updateShiftPeriodLabel();
     void loadShiftMonthCalendar();
+    void loadShiftMonthDetails();
     void loadShiftDayView();
     void showCurrentDayShift();
     void loadShiftList();

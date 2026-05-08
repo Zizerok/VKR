@@ -36,6 +36,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QLocale>
 #include <QMap>
 #include <QMenu>
 #include <QMessageBox>
@@ -71,6 +72,24 @@ struct CalendarShiftVisual
     bool complete = false;
 };
 
+QString userDisplayNameForId(int userId)
+{
+    if (userId <= 0)
+        return QString("Администратор");
+
+    QSqlQuery query(DatabaseManager::instance().database());
+    query.prepare("SELECT login FROM users WHERE id = ?");
+    query.addBindValue(userId);
+    if (query.exec() && query.next())
+    {
+        const QString login = query.value(0).toString().trimmed();
+        if (!login.isEmpty())
+            return login;
+    }
+
+    return QString("Администратор");
+}
+
 QString findAssetPath(const QString &fileName)
 {
     const QStringList candidates = {
@@ -99,7 +118,7 @@ QString buildCalendarCellHtml(int day,
     QString html =
         "<div style='font-family:Segoe UI;color:#1C1D21;'>";
 
-    html += "<table width='100%' cellspacing='0' cellpadding='0' style='margin-bottom:4px;'>"
+    html += "<table width='50%' cellspacing='0' cellpadding='0' style='margin-bottom:4px;'>"
             "<tr>"
             "<td align='left' valign='top'>";
     html += QString("<span style='font-size:15px;font-weight:700;'>%1</span>").arg(day);
@@ -112,22 +131,122 @@ QString buildCalendarCellHtml(int day,
 
     html += "</td></tr></table>";
 
-    for (const CalendarShiftVisual &line : shiftLines)
+    for (int i = 0; i < shiftLines.size(); ++i)
     {
+        const CalendarShiftVisual &line = shiftLines.at(i);
+        const bool useBlueAccent = line.complete && (i % 2 == 1);
+        const QString borderColor = line.complete
+                                        ? (useBlueAccent ? "#5E81F4" : "#2FA45B")
+                                        : "#D85A73";
+        const QString backgroundColor = line.complete
+                                            ? (useBlueAccent ? "#EEF3FF" : "#EAF7EE")
+                                            : "#FBE7EC";
+
         html += QString(
-                    "<div style='margin-bottom:5px;'>"
-                    "<span style='font-size:12px;font-weight:700;color:#1C1D21;line-height:1.25;"
-                    "background:%2;border:1px solid %1;border-radius:10px;"
-                    "padding:4px 7px;'>%3 | %4</span>"
+                    "<div style='margin-bottom:6px;'>"
+                    "<table width='100%%' cellspacing='0' cellpadding='0' style='border-collapse:separate;'>"
+                    "<tr>"
+                    "<td width='4' valign='middle' style='width:4px;min-width:4px;max-width:4px;padding-right:4px;'>"
+                    "<div style='width:4px;min-width:4px;max-width:4px;background:%1;border-radius:999px;height:34px;line-height:34px;'>&nbsp;</div>"
+                    "</td>"
+                    "<td valign='middle'>"
+                    "<div style='background:%2;border-radius:20px;padding:7px 10px;'>"
+                    "<span style='font-size:12px;font-weight:700;color:#1C1D21;line-height:1.25;'>%3 | %4</span>"
+                    "</div>"
+                    "</td>"
+                    "</tr>"
+                    "</table>"
                     "</div>")
-                    .arg(line.complete ? "#7CCF9B" : "#FF808B",
-                         line.complete ? "#E7FAEF" : "#FFE8EC",
+                    .arg(borderColor,
+                         backgroundColor,
                          line.timeRange.toHtmlEscaped(),
                          line.positionsText.toHtmlEscaped());
     }
 
     html += "</div>";
     return html;
+}
+
+QWidget *buildCalendarCellWidget(int day,
+                                 const QList<CalendarShiftVisual> &shiftLines,
+                                 bool showQuestionIcon,
+                                 bool isToday,
+                                 QWidget *parent)
+{
+    auto *cellWidget = new QFrame(parent);
+    cellWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    cellWidget->setStyleSheet(isToday
+        ? "background: transparent; border: 2px solid #F4BE5E; border-radius: 12px;"
+        : "background: transparent; border: none;");
+
+    auto *rootLayout = new QVBoxLayout(cellWidget);
+    rootLayout->setContentsMargins(5, 4, 5, 4);
+    rootLayout->setSpacing(5);
+
+    auto *headerLayout = new QHBoxLayout();
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(0);
+
+    auto *dayLabel = new QLabel(QString::number(day), cellWidget);
+    dayLabel->setStyleSheet("color:#1C1D21; font-size:15px; font-weight:700; background:transparent; border:none;");
+    dayLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+    headerLayout->addWidget(dayLabel, 0, Qt::AlignLeft | Qt::AlignTop);
+    headerLayout->addStretch(1);
+
+    if (showQuestionIcon)
+    {
+        auto *questionLabel = new QLabel("?", cellWidget);
+        questionLabel->setStyleSheet("color:#1C1D21; font-size:15px; font-weight:700; background:transparent; border:none;");
+        questionLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        headerLayout->addWidget(questionLabel, 0, Qt::AlignRight | Qt::AlignTop);
+    }
+
+    rootLayout->addLayout(headerLayout);
+
+    for (int i = 0; i < shiftLines.size(); ++i)
+    {
+        const CalendarShiftVisual &line = shiftLines.at(i);
+        const bool useBlueAccent = line.complete && (i % 2 == 1);
+        const QString accentColor = line.complete
+                                        ? (useBlueAccent ? "#5E81F4" : "#2FA45B")
+                                        : "#D85A73";
+        const QString fillColor = line.complete
+                                      ? (useBlueAccent ? "#EEF3FF" : "#EAF8EE")
+                                      : "#FFE8EC";
+
+        auto *pillRow = new QWidget(cellWidget);
+        pillRow->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        auto *pillLayout = new QHBoxLayout(pillRow);
+        pillLayout->setContentsMargins(0, 0, 0, 0);
+        pillLayout->setSpacing(4);
+
+        auto *accentBar = new QFrame(pillRow);
+        accentBar->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        accentBar->setFixedSize(4, 34);
+        accentBar->setStyleSheet(QString("background:%1; border:none; border-radius:6px;").arg(accentColor));
+
+        auto *backgroundFrame = new QFrame(pillRow);
+        backgroundFrame->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        backgroundFrame->setMinimumHeight(34);
+        backgroundFrame->setStyleSheet(QString("background:%1; border:none; border-radius:17px;").arg(fillColor));
+        auto *backgroundLayout = new QHBoxLayout(backgroundFrame);
+        backgroundLayout->setContentsMargins(9, 0, 9, 0);
+        backgroundLayout->setSpacing(0);
+
+        auto *textLabel = new QLabel(QString("%1 | %2").arg(line.timeRange, line.positionsText), backgroundFrame);
+        textLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        textLabel->setStyleSheet("color:#1C1D21; font-size:12px; font-weight:700; background:transparent; border:none;");
+        textLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+        backgroundLayout->addWidget(textLabel);
+
+        pillLayout->addWidget(accentBar, 0, Qt::AlignVCenter);
+        pillLayout->addWidget(backgroundFrame, 1);
+        rootLayout->addWidget(pillRow);
+    }
+
+    rootLayout->addStretch(1);
+    return cellWidget;
 }
 
 void applyButtonIcon(QAbstractButton *button, const QString &fileName, const QSize &size = QSize(18, 18))
@@ -143,31 +262,58 @@ void applyButtonIcon(QAbstractButton *button, const QString &fileName, const QSi
     button->setIconSize(size);
 }
 
-QFrame *createKpiCard(const QString &title, QLabel **valueLabel, QWidget *parent)
+QFrame *createKpiCard(const QString &title,
+                      QLabel **valueLabel,
+                      QLabel **subtitleLabel,
+                      QWidget *parent,
+                      const QString &accentColor = "#5E81F4")
 {
+    Q_UNUSED(accentColor);
+
     auto *card = new QFrame(parent);
     card->setObjectName("shiftKpiCard");
     auto *layout = new QVBoxLayout(card);
-    layout->setContentsMargins(14, 12, 14, 12);
-    layout->setSpacing(4);
+    layout->setContentsMargins(14, 10, 14, 10);
+    layout->setSpacing(2);
 
     auto *titleLabel = new QLabel(title, card);
     titleLabel->setObjectName("shiftKpiTitleLabel");
+    titleLabel->setWordWrap(true);
 
     auto *value = new QLabel("0", card);
     value->setObjectName("shiftKpiValueLabel");
+    auto *subtitle = new QLabel(card);
+    subtitle->setObjectName("shiftKpiSubtitleLabel");
+    subtitle->setWordWrap(true);
+    subtitle->setTextFormat(Qt::RichText);
+    subtitle->hide();
 
     layout->addWidget(titleLabel);
     layout->addWidget(value);
-    layout->addStretch();
+    layout->addWidget(subtitle);
+    layout->addStretch(1);
 
     if (valueLabel)
         *valueLabel = value;
+    if (subtitleLabel)
+        *subtitleLabel = subtitle;
 
     card->setMinimumHeight(78);
-    card->setMaximumHeight(86);
+    card->setMaximumHeight(82);
 
     return card;
+}
+
+QString shiftTitleFromTime(const QString &startTimeText)
+{
+    const QTime startTime = QTime::fromString(startTimeText, "HH:mm");
+    if (!startTime.isValid())
+        return QString("Рабочая смена");
+    if (startTime < QTime(12, 0))
+        return QString("Утренняя смена");
+    if (startTime < QTime(17, 0))
+        return QString("Дневная смена");
+    return QString("Вечерняя смена");
 }
 
 double parsePaymentNumber(const QString& text)
@@ -279,6 +425,14 @@ bool BusinessMainWindow::eventFilter(QObject *watched, QEvent *event)
             shiftMonthTooltipFrame->hide();
     }
 
+    if (watched && watched->property("shiftCellDate").isValid() && event->type() == QEvent::MouseButtonPress)
+    {
+        currentShiftDate = watched->property("shiftCellDate").toDate();
+        loadShiftDayView();
+        loadShiftMonthDetails();
+        return true;
+    }
+
     if (watched && watched->property("shiftTooltipWidget").toBool())
     {
         const QString tooltipText = watched->property("shiftTooltipText").toString();
@@ -320,7 +474,8 @@ void BusinessMainWindow::applyWindowStyles()
     }
 
     const QString chevronPath = findAssetPath("chevron-down.svg").replace("\\", "/");
-    setStyleSheet(QString(R"(
+    const QString windowStyle =
+        QString(R"(
         QMainWindow, QWidget#centralwidget {
             background: #F6F6F6;
         }
@@ -475,10 +630,68 @@ void BusinessMainWindow::applyWindowStyles()
             color: #8181A5;
             padding: 4px 0 2px 0;
         }
-        QFrame#shiftKpiCard, QFrame#shiftDayCard {
+        QFrame#shiftKpiCard, QFrame#shiftDayCard, QFrame#shiftMonthDetailsCard,
+        QFrame#shiftMonthDetailItemCard {
             background: #FFFFFF;
             border: 1px solid #ECECF2;
             border-radius: 20px;
+        }
+        QLabel#shiftMonthDetailsTitleLabel {
+            color: #1C1D21;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        QLabel#shiftMonthDetailsDateLabel {
+            color: #8181A5;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        QLabel#shiftMonthDetailsBadgeLabel {
+            background: #FFF6DD;
+            color: #D79A17;
+            border-radius: 12px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        QLabel#shiftMonthDetailShiftTitleLabel {
+            color: #1C1D21;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        QLabel#shiftMonthDetailShiftTimeLabel,
+        QLabel#shiftMonthDetailShiftInfoLabel,
+        QLabel#shiftMonthDetailEmptyLabel {
+            color: #8181A5;
+            font-size: 13px;
+        }
+        QScrollArea#shiftMonthDetailsScrollArea {
+            background: transparent;
+            border: none;
+        }
+        QScrollArea#shiftMonthDetailsScrollArea > QWidget > QWidget {
+            background: transparent;
+        }
+        QScrollArea#shiftMonthDetailsScrollArea QScrollBar:vertical {
+            background: transparent;
+            width: 12px;
+            margin: 4px 0 4px 0;
+        }
+        QScrollArea#shiftMonthDetailsScrollArea QScrollBar::handle:vertical {
+            background: #D7E2FF;
+            min-height: 46px;
+            border-radius: 6px;
+        }
+        QScrollArea#shiftMonthDetailsScrollArea QScrollBar::handle:vertical:hover {
+            background: #C1D2FF;
+        }
+        QScrollArea#shiftMonthDetailsScrollArea QScrollBar::add-line:vertical,
+        QScrollArea#shiftMonthDetailsScrollArea QScrollBar::sub-line:vertical,
+        QScrollArea#shiftMonthDetailsScrollArea QScrollBar::add-page:vertical,
+        QScrollArea#shiftMonthDetailsScrollArea QScrollBar::sub-page:vertical {
+            background: transparent;
+            border: none;
+            height: 0px;
         }
         QFrame#paymentsLeftCard,
         QFrame#paymentsRightCard,
@@ -510,13 +723,21 @@ void BusinessMainWindow::applyWindowStyles()
         }
         QLabel#shiftKpiTitleLabel {
             color: #8181A5;
-            font-size: 12px;
+            font-size: 11px;
+            font-weight: 600;
         }
         QLabel#shiftKpiValueLabel {
             color: #1C1D21;
-            font-size: 22px;
+            font-size: 17px;
             font-weight: 700;
         }
+        QLabel#shiftKpiSubtitleLabel {
+            color: #8181A5;
+            font-size: 12px;
+            line-height: 1.3;
+        }
+    )")
+        + QString(R"(
         QTableWidget {
             background: #FFFFFF;
             border: 1px solid #ECECF2;
@@ -644,6 +865,8 @@ void BusinessMainWindow::applyWindowStyles()
             width: 12px;
             height: 12px;
         }
+    )")
+        + QString(R"(
         QTabWidget::pane {
             margin-top: 10px;
             padding: 12px;
@@ -709,6 +932,8 @@ void BusinessMainWindow::applyWindowStyles()
             font-size: 14px;
             font-weight: 600;
         }
+    )")
+        + QString(R"(
         QListWidget#paymentsEmployeeListWidget::item,
         QListWidget#paymentsShiftListWidget::item,
         QListWidget#notificationsHistoryListWidget::item,
@@ -829,7 +1054,8 @@ void BusinessMainWindow::applyWindowStyles()
             font-size: 14px;
             font-weight: 600;
         }
-    )").arg(chevronPath));
+    )");
+    setStyleSheet(windowStyle.arg(chevronPath));
 
     applyNavigationIcons();
 }
@@ -1045,6 +1271,48 @@ void BusinessMainWindow::setupNavigation()
     connect(ui->pushButtonSettings, &QPushButton::clicked, this, [this]() {
         showSection(5, "Настройки");
     });
+
+}
+
+void BusinessMainWindow::setupSidebarUserCard()
+{
+    if (sidebarUserNameLabel)
+        return;
+
+    auto *userCard = new QFrame(this);
+    userCard->setObjectName("sidebarUserCard");
+    auto *userLayout = new QHBoxLayout(userCard);
+    userLayout->setContentsMargins(14, 12, 14, 12);
+    userLayout->setSpacing(12);
+
+    auto *avatarWrap = new QFrame(userCard);
+    avatarWrap->setFixedSize(36, 36);
+    avatarWrap->setStyleSheet("background:#EEF2FF; border-radius:18px;");
+    auto *avatarLayout = new QVBoxLayout(avatarWrap);
+    avatarLayout->setContentsMargins(0, 0, 0, 0);
+    avatarLayout->setAlignment(Qt::AlignCenter);
+
+    auto *avatarDot = new QFrame(avatarWrap);
+    avatarDot->setFixedSize(14, 14);
+    avatarDot->setStyleSheet("background:#5E81F4; border-radius:7px;");
+    avatarLayout->addWidget(avatarDot);
+
+    auto *textLayout = new QVBoxLayout();
+    textLayout->setContentsMargins(0, 0, 0, 0);
+    textLayout->setSpacing(2);
+
+    sidebarUserNameLabel = new QLabel(userDisplayNameForId(currentUserId), userCard);
+    sidebarUserNameLabel->setObjectName("sidebarUserNameLabel");
+    sidebarUserRoleLabel = new QLabel("Администратор", userCard);
+    sidebarUserRoleLabel->setObjectName("sidebarUserRoleLabel");
+
+    textLayout->addWidget(sidebarUserNameLabel);
+    textLayout->addWidget(sidebarUserRoleLabel);
+
+    userLayout->addWidget(avatarWrap, 0, Qt::AlignTop);
+    userLayout->addLayout(textLayout, 1);
+
+    ui->sidebarLayout->insertWidget(ui->sidebarLayout->count() - 1, userCard);
 }
 
 void BusinessMainWindow::showSection(int index, const QString& sectionTitle)
@@ -1127,11 +1395,11 @@ void BusinessMainWindow::setupShiftDashboardCards()
     auto *kpiLayout = new QHBoxLayout(kpiContainer);
     kpiLayout->setContentsMargins(0, 0, 0, 0);
     kpiLayout->setSpacing(10);
-    kpiLayout->addWidget(createKpiCard("Смен в периоде", &shiftKpiShiftsCountLabel, kpiContainer));
-    kpiLayout->addWidget(createKpiCard("Свободных позиций", &shiftKpiOpenPositionsLabel, kpiContainer));
-    kpiLayout->addWidget(createKpiCard("Назначено сотрудников", &shiftKpiAssignedEmployeesLabel, kpiContainer));
-    kpiLayout->addWidget(createKpiCard("Нужно закрыть", &shiftKpiNeedsAttentionLabel, kpiContainer));
-    kpiContainer->setMaximumHeight(92);
+    kpiLayout->addWidget(createKpiCard("Смен сегодня", &shiftKpiShiftsCountLabel, &shiftKpiShiftsSubtitleLabel, kpiContainer, "#5E81F4"));
+    kpiLayout->addWidget(createKpiCard("Активные сотрудники", &shiftKpiAssignedEmployeesLabel, &shiftKpiEmployeesSubtitleLabel, kpiContainer, "#36A66A"));
+    kpiLayout->addWidget(createKpiCard("Отклики через канал связи", &shiftKpiOpenPositionsLabel, &shiftKpiResponsesSubtitleLabel, kpiContainer, "#8A6FF0"));
+    kpiLayout->addWidget(createKpiCard("Начисления за день", &shiftKpiNeedsAttentionLabel, &shiftKpiPaymentsSubtitleLabel, kpiContainer, "#D89A15"));
+    kpiContainer->setMaximumHeight(84);
 
     shiftLegendLabel = new QLabel(this);
     shiftLegendLabel->setObjectName("shiftLegendLabel");
@@ -1149,63 +1417,132 @@ void BusinessMainWindow::refreshShiftDashboard()
     if (currentBusinessId < 0)
     {
         shiftKpiShiftsCountLabel->setText("0");
-        shiftKpiOpenPositionsLabel->setText("0");
         shiftKpiAssignedEmployeesLabel->setText("0");
-        shiftKpiNeedsAttentionLabel->setText("0");
+        shiftKpiOpenPositionsLabel->setText("0");
+        shiftKpiNeedsAttentionLabel->setText("0 ₽");
         return;
     }
 
-    QDate fromDate;
-    QDate toDate;
+    const QDate today = QDate::currentDate();
+    const QDate weekStart = today.addDays(1 - today.dayOfWeek());
+    const QDate weekEnd = weekStart.addDays(6);
 
-    switch (ui->stackedWidgetShiftContent->currentIndex())
-    {
-    case 0:
-        fromDate = QDate(currentShiftDate.year(), currentShiftDate.month(), 1);
-        toDate = fromDate.addMonths(1).addDays(-1);
-        break;
-    case 1:
-        fromDate = currentShiftDate;
-        toDate = currentShiftDate;
-        break;
-    default:
-        fromDate = showingShiftArchive ? QDate(2000, 1, 1) : QDate::currentDate();
-        toDate = showingShiftArchive ? QDate::currentDate() : QDate::currentDate().addDays(30);
-        break;
-    }
+    auto formatMoney = [](double value) {
+        QString text = QLocale(QLocale::Russian, QLocale::Russia).toString(qRound64(value));
+        text.replace(QChar(0xA0), ' ');
+        return text + " ₽";
+    };
 
-    int shiftCount = 0;
-    int openPositions = 0;
-    int assignedEmployees = 0;
-    int needsAttention = 0;
+    int shiftsToday = 0;
+    int shiftsNeedStaff = 0;
+    int fixedPaymentsCount = 0;
+    int percentPaymentsCount = 0;
+    double totalAccruedToday = 0.0;
 
-    QSqlQuery query = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, fromDate, toDate);
+    QSqlQuery query = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, today, today);
     while (query.next())
     {
-        ++shiftCount;
+        ++shiftsToday;
         const int shiftId = query.value("id").toInt();
         const QList<ShiftAssignedEmployeeData> assignments = DatabaseManager::instance().getShiftAssignments(shiftId);
         const QList<ShiftOpenPositionData> shiftOpenPositions = DatabaseManager::instance().getShiftOpenPositions(shiftId);
-
-        assignedEmployees += assignments.size();
 
         int shiftOpenCount = 0;
         for (const ShiftOpenPositionData &openPosition : shiftOpenPositions)
             shiftOpenCount += openPosition.employeeCount;
 
-        openPositions += shiftOpenCount;
         if (shiftOpenCount > 0)
-            ++needsAttention;
+            ++shiftsNeedStaff;
+
+        for (const ShiftAssignedEmployeeData &assignment : assignments)
+        {
+            ShiftPaymentInfo payment;
+            payment.paymentType = assignment.paymentType;
+            payment.hourlyRate = assignment.hourlyRate;
+            payment.fixedRate = assignment.fixedRate;
+            payment.percentRate = assignment.percentRate;
+            payment.revenueAmount.clear();
+            payment.timeRange = QString("%1 - %2")
+                                    .arg(query.value("start_time").toString(),
+                                         query.value("end_time").toString());
+
+            totalAccruedToday += calculatePaymentAmount(payment);
+
+            const QString paymentType = assignment.paymentType.trimmed().toLower();
+            if (paymentType.contains("фикс") || paymentType.contains("ставка"))
+                ++fixedPaymentsCount;
+            if (paymentType.contains("процент"))
+                ++percentPaymentsCount;
+        }
     }
 
-    shiftKpiShiftsCountLabel->setText(QString::number(shiftCount));
-    shiftKpiOpenPositionsLabel->setText(QString::number(openPositions));
-    shiftKpiAssignedEmployeesLabel->setText(QString::number(assignedEmployees));
-    shiftKpiNeedsAttentionLabel->setText(QString::number(needsAttention));
+    int activeEmployees = 0;
+    QSqlQuery activeEmployeesQuery(DatabaseManager::instance().database());
+    activeEmployeesQuery.prepare(
+        "SELECT COUNT(*) "
+        "FROM employees "
+        "WHERE business_id = :business_id "
+        "AND COALESCE(is_active, 1) = 1");
+    activeEmployeesQuery.bindValue(":business_id", currentBusinessId);
+    if (activeEmployeesQuery.exec() && activeEmployeesQuery.next())
+        activeEmployees = activeEmployeesQuery.value(0).toInt();
+
+    const int positionsCount = DatabaseManager::instance().getPositions(currentBusinessId, true).size();
+
+    int replaceableRolesCount = 0;
+    QSqlQuery replaceableQuery(DatabaseManager::instance().database());
+    replaceableQuery.prepare(
+        "SELECT COUNT(*) "
+        "FROM position_capabilities pc "
+        "JOIN positions p ON p.id = pc.position_id "
+        "WHERE p.business_id = :business_id");
+    replaceableQuery.bindValue(":business_id", currentBusinessId);
+    if (replaceableQuery.exec() && replaceableQuery.next())
+        replaceableRolesCount = replaceableQuery.value(0).toInt();
+
+    int totalResponses = 0;
+    int acceptedResponses = 0;
+    QSqlQuery responseQuery(DatabaseManager::instance().database());
+    responseQuery.prepare(
+        "SELECT response_status "
+        "FROM shift_responses "
+        "WHERE business_id = :business_id "
+        "AND created_at::date >= :start_date "
+        "AND created_at::date <= :end_date");
+    responseQuery.bindValue(":business_id", currentBusinessId);
+    responseQuery.bindValue(":start_date", weekStart.toString(Qt::ISODate));
+    responseQuery.bindValue(":end_date", weekEnd.toString(Qt::ISODate));
+    if (responseQuery.exec())
+    {
+        while (responseQuery.next())
+        {
+            ++totalResponses;
+            const QString status = responseQuery.value(0).toString().trimmed().toLower();
+            if (status.contains("зан") || status.contains("accepted") || status.contains("назнач"))
+                ++acceptedResponses;
+        }
+    }
+
+    shiftKpiShiftsCountLabel->setText(QString::number(shiftsToday));
+    shiftKpiAssignedEmployeesLabel->setText(QString::number(activeEmployees));
+    shiftKpiOpenPositionsLabel->setText(QString::number(totalResponses));
+    shiftKpiNeedsAttentionLabel->setText(formatMoney(totalAccruedToday));
+
+    Q_UNUSED(shiftsNeedStaff);
+    Q_UNUSED(positionsCount);
+    Q_UNUSED(replaceableRolesCount);
+    Q_UNUSED(acceptedResponses);
+    Q_UNUSED(fixedPaymentsCount);
+    Q_UNUSED(percentPaymentsCount);
 }
 
 void BusinessMainWindow::setupShiftMonthCalendar()
 {
+    auto *monthContentWidget = new QWidget(this);
+    auto *monthContentLayout = new QHBoxLayout(monthContentWidget);
+    monthContentLayout->setContentsMargins(0, 0, 0, 0);
+    monthContentLayout->setSpacing(18);
+
     shiftMonthTable = new QTableWidget(5, 7, this);
     shiftMonthTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     shiftMonthTable->setSelectionMode(QAbstractItemView::NoSelection);
@@ -1245,8 +1582,53 @@ void BusinessMainWindow::setupShiftMonthCalendar()
         "}");
     shiftMonthTooltipFrame->hide();
 
+    auto *detailsCard = new QFrame(this);
+    detailsCard->setObjectName("shiftMonthDetailsCard");
+    detailsCard->setMinimumWidth(290);
+    detailsCard->setMaximumWidth(330);
+    auto *detailsLayout = new QVBoxLayout(detailsCard);
+    detailsLayout->setContentsMargins(18, 18, 18, 18);
+    detailsLayout->setSpacing(12);
+
+    auto *detailsHeaderLayout = new QHBoxLayout();
+    detailsHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    detailsHeaderLayout->setSpacing(10);
+
+    auto *detailsTitleLabel = new QLabel("Детали дня", detailsCard);
+    detailsTitleLabel->setObjectName("shiftMonthDetailsTitleLabel");
+    shiftMonthDetailsBadgeLabel = new QLabel(detailsCard);
+    shiftMonthDetailsBadgeLabel->setObjectName("shiftMonthDetailsBadgeLabel");
+    shiftMonthDetailsBadgeLabel->setAlignment(Qt::AlignCenter);
+
+    detailsHeaderLayout->addWidget(detailsTitleLabel);
+    detailsHeaderLayout->addStretch();
+    detailsHeaderLayout->addWidget(shiftMonthDetailsBadgeLabel);
+
+    shiftMonthDetailsDateLabel = new QLabel(detailsCard);
+    shiftMonthDetailsDateLabel->setObjectName("shiftMonthDetailsDateLabel");
+
+    auto *detailsScrollArea = new QScrollArea(detailsCard);
+    detailsScrollArea->setObjectName("shiftMonthDetailsScrollArea");
+    detailsScrollArea->setWidgetResizable(true);
+    detailsScrollArea->setFrameShape(QFrame::NoFrame);
+    detailsScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    auto *detailsScrollWidget = new QWidget(detailsScrollArea);
+    shiftMonthDetailsListLayout = new QVBoxLayout(detailsScrollWidget);
+    shiftMonthDetailsListLayout->setContentsMargins(0, 0, 0, 0);
+    shiftMonthDetailsListLayout->setSpacing(12);
+    shiftMonthDetailsListLayout->addStretch();
+    detailsScrollArea->setWidget(detailsScrollWidget);
+
+    detailsLayout->addLayout(detailsHeaderLayout);
+    detailsLayout->addWidget(shiftMonthDetailsDateLabel);
+    detailsLayout->addWidget(detailsScrollArea, 1);
+
     ui->labelShiftMonthPlaceholder->hide();
-    ui->verticalLayoutShiftMonth->addWidget(shiftMonthTable);
+
+    monthContentLayout->addWidget(shiftMonthTable, 1);
+    monthContentLayout->addWidget(detailsCard);
+    ui->verticalLayoutShiftMonth->addWidget(monthContentWidget);
 }
 
 void BusinessMainWindow::setupShiftDayView()
@@ -1473,8 +1855,6 @@ void BusinessMainWindow::loadShiftMonthCalendar()
     if (currentBusinessId < 0)
         return;
 
-    const QString questionIconPath = findAssetPath("free-icon-question-1828940.png");
-
     QMap<QDate, QList<CalendarShiftVisual>> shiftsByDate;
     QSqlQuery query = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, firstDay, lastDay);
     while (query.next())
@@ -1519,12 +1899,12 @@ void BusinessMainWindow::loadShiftMonthCalendar()
         QList<CalendarShiftVisual> visibleShiftLines = shiftLines;
         bool tooltipOnly = false;
 
-        if (shiftLines.size() > 1)
+        if (shiftLines.size() > 2)
         {
-            visibleShiftLines = {shiftLines.first()};
+            visibleShiftLines = shiftLines.mid(0, 2);
             tooltipOnly = true;
         }
-        else if (fullText.length() > 70)
+        else if (fullText.length() > 110)
         {
             visibleShiftLines = shiftLines.isEmpty() ? QList<CalendarShiftVisual>() : QList<CalendarShiftVisual>{shiftLines.first()};
             tooltipOnly = true;
@@ -1544,24 +1924,177 @@ void BusinessMainWindow::loadShiftMonthCalendar()
 
         shiftMonthTable->setItem(row, column, item);
 
-        auto *cellLabel = new QLabel(shiftMonthTable);
-        cellLabel->setTextFormat(Qt::RichText);
-        cellLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-        cellLabel->setWordWrap(true);
-        cellLabel->setMargin(4);
-        cellLabel->setText(buildCalendarCellHtml(day, visibleShiftLines, tooltipOnly, questionIconPath));
-        cellLabel->setStyleSheet(isToday
-            ? "background: transparent; border: 2px solid #F4BE5E; border-radius: 12px;"
-            : "background: transparent; border: none;");
-        cellLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        cellLabel->setProperty("shiftTooltipWidget", tooltipOnly);
-        cellLabel->setProperty("shiftTooltipText", tooltipOnly ? fullText : QString());
-        cellLabel->setMouseTracking(true);
-        cellLabel->installEventFilter(this);
-        shiftMonthTable->setCellWidget(row, column, cellLabel);
+        auto *cellWidget = buildCalendarCellWidget(day, visibleShiftLines, tooltipOnly, isToday, shiftMonthTable);
+        cellWidget->setProperty("shiftTooltipWidget", tooltipOnly);
+        cellWidget->setProperty("shiftTooltipText", tooltipOnly ? fullText : QString());
+        cellWidget->setProperty("shiftCellDate", cellDate);
+        cellWidget->setCursor(Qt::PointingHandCursor);
+        cellWidget->setMouseTracking(true);
+        cellWidget->installEventFilter(this);
+        shiftMonthTable->setCellWidget(row, column, cellWidget);
     }
 
+    loadShiftMonthDetails();
     refreshShiftDashboard();
+}
+
+void BusinessMainWindow::loadShiftMonthDetails()
+{
+    if (!shiftMonthDetailsDateLabel || !shiftMonthDetailsBadgeLabel || !shiftMonthDetailsListLayout)
+        return;
+
+    shiftMonthDetailsDateLabel->setText(currentShiftDate.toString("dd MMMM, dddd"));
+
+    while (shiftMonthDetailsListLayout->count() > 0)
+    {
+        QLayoutItem *item = shiftMonthDetailsListLayout->takeAt(0);
+        if (item->widget())
+            item->widget()->deleteLater();
+        delete item;
+    }
+
+    if (currentBusinessId < 0)
+    {
+        auto *emptyLabel = new QLabel("Сначала выберите предприятие.", this);
+        emptyLabel->setObjectName("shiftMonthDetailEmptyLabel");
+        emptyLabel->setWordWrap(true);
+        shiftMonthDetailsListLayout->addWidget(emptyLabel);
+        shiftMonthDetailsListLayout->addStretch();
+        shiftMonthDetailsBadgeLabel->setText("Нет данных");
+        shiftMonthDetailsBadgeLabel->setStyleSheet("background:#F3F4F8; color:#8181A5; border-radius:12px; padding:6px 12px; font-size:12px; font-weight:600;");
+        return;
+    }
+
+    QSqlQuery query = DatabaseManager::instance().getShiftsForPeriod(currentBusinessId, currentShiftDate, currentShiftDate);
+    QList<int> shiftIds;
+    while (query.next())
+        shiftIds.append(query.value("id").toInt());
+
+    if (shiftIds.isEmpty())
+    {
+        auto *emptyLabel = new QLabel("На выбранную дату смен пока нет.", this);
+        emptyLabel->setObjectName("shiftMonthDetailEmptyLabel");
+        emptyLabel->setWordWrap(true);
+        shiftMonthDetailsListLayout->addWidget(emptyLabel);
+        shiftMonthDetailsListLayout->addStretch();
+        shiftMonthDetailsBadgeLabel->setText("Смен нет");
+        shiftMonthDetailsBadgeLabel->setStyleSheet("background:#F3F4F8; color:#8181A5; border-radius:12px; padding:6px 12px; font-size:12px; font-weight:600;");
+        return;
+    }
+
+    bool hasOpenPositions = false;
+    int totalAssignedAll = 0;
+    int totalOpenAll = 0;
+
+    for (int shiftId : std::as_const(shiftIds))
+    {
+        const QList<ShiftAssignedEmployeeData> assignments = DatabaseManager::instance().getShiftAssignments(shiftId);
+        const QList<ShiftOpenPositionData> openPositions = DatabaseManager::instance().getShiftOpenPositions(shiftId);
+        totalAssignedAll += assignments.size();
+        for (const ShiftOpenPositionData &openPosition : openPositions)
+            totalOpenAll += openPosition.employeeCount;
+    }
+
+    auto *summaryCard = new QFrame(this);
+    summaryCard->setObjectName("shiftMonthDetailItemCard");
+    auto *summaryLayout = new QVBoxLayout(summaryCard);
+    summaryLayout->setContentsMargins(16, 14, 16, 14);
+    summaryLayout->setSpacing(6);
+
+    auto *summaryTitle = new QLabel("Сводка по дню", summaryCard);
+    summaryTitle->setObjectName("shiftMonthDetailShiftTitleLabel");
+    auto *summaryAssigned = new QLabel(QString("Назначены: %1").arg(totalAssignedAll), summaryCard);
+    summaryAssigned->setObjectName("shiftMonthDetailShiftInfoLabel");
+    summaryAssigned->setStyleSheet("color:#4CAF7A; font-weight:600;");
+    auto *summaryOpen = new QLabel(QString("Требуется добор: %1").arg(totalOpenAll), summaryCard);
+    summaryOpen->setObjectName("shiftMonthDetailShiftInfoLabel");
+    summaryOpen->setStyleSheet(QString("color:%1; font-weight:600;")
+                                   .arg(totalOpenAll > 0 ? "#FF808B" : "#8181A5"));
+
+    summaryLayout->addWidget(summaryTitle);
+    summaryLayout->addWidget(summaryAssigned);
+    summaryLayout->addWidget(summaryOpen);
+    shiftMonthDetailsListLayout->addWidget(summaryCard);
+
+    for (int shiftId : std::as_const(shiftIds))
+    {
+        QSqlQuery shiftQuery = DatabaseManager::instance().getShiftById(shiftId);
+        if (!shiftQuery.next())
+            continue;
+
+        const QString startTime = shiftQuery.value("start_time").toString();
+        const QString endTime = shiftQuery.value("end_time").toString();
+        const QList<ShiftAssignedEmployeeData> assignments = DatabaseManager::instance().getShiftAssignments(shiftId);
+        const QList<ShiftOpenPositionData> openPositions = DatabaseManager::instance().getShiftOpenPositions(shiftId);
+
+        int openCount = 0;
+        QStringList openLines;
+        for (const ShiftOpenPositionData &openPosition : openPositions)
+        {
+            openCount += openPosition.employeeCount;
+            openLines << QString("%1 x%2").arg(openPosition.positionName).arg(openPosition.employeeCount);
+        }
+
+        const int assignedCount = assignments.size();
+        const int totalCount = assignedCount + openCount;
+        hasOpenPositions = hasOpenPositions || openCount > 0;
+
+        auto *itemCard = new QFrame(this);
+        itemCard->setObjectName("shiftMonthDetailItemCard");
+        auto *itemLayout = new QVBoxLayout(itemCard);
+        itemLayout->setContentsMargins(16, 16, 16, 16);
+        itemLayout->setSpacing(8);
+
+        auto *titleLabel = new QLabel(shiftTitleFromTime(startTime), itemCard);
+        titleLabel->setObjectName("shiftMonthDetailShiftTitleLabel");
+
+        auto *timeLabel = new QLabel(QString("%1 - %2").arg(startTime, endTime), itemCard);
+        timeLabel->setObjectName("shiftMonthDetailShiftTimeLabel");
+
+        auto *assignedLabel = new QLabel(QString("Назначены: %1 из %2").arg(assignedCount).arg(totalCount), itemCard);
+        assignedLabel->setObjectName("shiftMonthDetailShiftInfoLabel");
+        assignedLabel->setStyleSheet(QString("color:%1; font-weight:600;")
+                                         .arg(openCount > 0 ? "#FF808B" : "#4CAF7A"));
+
+        QStringList employeeNames;
+        for (const ShiftAssignedEmployeeData &assignment : assignments)
+            employeeNames << assignment.employeeName;
+
+        auto *employeeLabel = new QLabel(itemCard);
+        employeeLabel->setObjectName("shiftMonthDetailShiftInfoLabel");
+        employeeLabel->setWordWrap(true);
+        employeeLabel->setText(employeeNames.isEmpty()
+                                   ? "Назначенные сотрудники пока отсутствуют"
+                                   : employeeNames.join(", "));
+
+        itemLayout->addWidget(titleLabel);
+        itemLayout->addWidget(timeLabel);
+        itemLayout->addWidget(assignedLabel);
+        itemLayout->addWidget(employeeLabel);
+
+        if (!openLines.isEmpty())
+        {
+            auto *openLabel = new QLabel(QString("Свободные позиции: %1").arg(openLines.join(", ")), itemCard);
+            openLabel->setObjectName("shiftMonthDetailShiftInfoLabel");
+            openLabel->setWordWrap(true);
+            itemLayout->addWidget(openLabel);
+        }
+
+        shiftMonthDetailsListLayout->addWidget(itemCard);
+    }
+
+    shiftMonthDetailsListLayout->addStretch();
+
+    if (hasOpenPositions)
+    {
+        shiftMonthDetailsBadgeLabel->setText("Требуется добор");
+        shiftMonthDetailsBadgeLabel->setStyleSheet("background:#FFF4DA; color:#D29315; border-radius:12px; padding:6px 12px; font-size:12px; font-weight:700;");
+    }
+    else
+    {
+        shiftMonthDetailsBadgeLabel->setText("Укомплектовано");
+        shiftMonthDetailsBadgeLabel->setStyleSheet("background:#E7FAEF; color:#319B59; border-radius:12px; padding:6px 12px; font-size:12px; font-weight:700;");
+    }
 }
 
 void BusinessMainWindow::loadShiftDayView()
