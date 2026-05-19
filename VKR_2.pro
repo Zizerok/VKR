@@ -49,6 +49,7 @@ FORMS += \
     businesslist.ui \
     businessmainwindow.ui \
     login.ui \
+    mainwindow.ui \
     registration.ui
 
 # Default rules for deployment.

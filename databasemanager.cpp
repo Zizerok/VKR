@@ -631,7 +631,7 @@ QSqlQuery DatabaseManager::getEmployees(int businessId, bool ascending)
     QSqlQuery query(db);
     const QString orderBy = ascending ? "ASC" : "DESC";
     query.prepare(
-        "SELECT id, full_name FROM employees "
+        "SELECT id, full_name, position, phone, vk_id, is_active FROM employees "
         "WHERE business_id = ? "
         "ORDER BY full_name " + orderBy
         );

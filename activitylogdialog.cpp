@@ -195,6 +195,17 @@ void ActivityLogDialog::buildUi()
         QPushButton#secondaryButton:hover {
             background: #E3EAFE;
         }
+        QPushButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QComboBox:disabled,
+        QListWidget:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
     )");
 
     connect(filterComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {

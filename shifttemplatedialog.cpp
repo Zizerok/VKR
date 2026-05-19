@@ -434,6 +434,28 @@ void ShiftTemplateDialog::applyStyles()
             color: #FF808B;
             border: 1px solid #FFD8DE;
         }
+        QPushButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QDateEdit#styledDateEdit:disabled,
+        QLineEdit:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QDateEdit#styledDateEdit:read-only,
+        QLineEdit:read-only {
+            background: #F6F7FB;
+            color: #8E94A6;
+            border: 1px solid #E4E8F2;
+        }
+        QListWidget#styledListWidget:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
         QLabel {
             color: #1C1D21;
         }

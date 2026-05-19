@@ -122,6 +122,16 @@ void ShiftArchiveDialog::buildUi()
         QPushButton#primaryButton:hover {
             background: #4E73EB;
         }
+        QPushButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QListWidget:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
     )");
 
     connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);

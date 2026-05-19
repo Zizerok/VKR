@@ -143,9 +143,19 @@ void BusinessList::applyStyles()
             background: #FFE6EA;
         }
         QPushButton:disabled {
-            background: #F5F5FA;
-            color: #B6B6CE;
-            border: 1px solid #ECECF2;
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit#lineEdit_search:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit#lineEdit_search:read-only {
+            background: #F6F7FB;
+            color: #8E94A6;
+            border: 1px solid #E4E8F2;
         }
     )");
 }

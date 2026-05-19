@@ -104,6 +104,21 @@ AddBusinessDialog::AddBusinessDialog(QWidget *parent)
             background: #E9EDFB;
             color: #5E81F4;
         }
+        QPushButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border-bottom: 1px solid #E1E5F0;
+        }
+        QLineEdit:read-only {
+            background: #F6F7FB;
+            color: #8E94A6;
+            border-bottom: 1px solid #E4E8F2;
+        }
     )");
 
     statusLabel->setStyleSheet("color: #FF808B; background: transparent; border: none;");

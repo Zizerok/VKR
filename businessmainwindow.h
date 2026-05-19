@@ -45,6 +45,7 @@ private:
     int currentUserId = -1;
     int currentBusinessId = -1;
     QDate currentShiftDate = QDate::currentDate();
+    bool hasSelectedShiftDate = false;
     bool showingShiftArchive = false;
     QTableWidget *shiftMonthTable = nullptr;
     int currentDayShiftIndex = 0;

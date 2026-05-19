@@ -44,6 +44,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPalette>
+#include <QPainter>
 #include <QPushButton>
 #include <QGroupBox>
 #include <QScrollArea>
@@ -110,6 +111,51 @@ QString findAssetPath(const QString &fileName)
     return QString();
 }
 
+QPixmap buildProgramLogoPixmap(const QSize &size)
+{
+    QPixmap pixmap(size);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+
+    const QRectF outerRect(0, 0, size.width(), size.height());
+    painter.setBrush(QColor("#EEF3FF"));
+    painter.drawRoundedRect(outerRect, 28, 28);
+
+    painter.setBrush(QColor("#5E81F4"));
+    painter.setPen(QPen(QColor("#0F8BFF"), 1.6));
+    painter.drawEllipse(QRectF(size.width() * 0.24, size.height() * 0.18,
+                               size.width() * 0.46, size.height() * 0.46));
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(94, 129, 244, 165));
+    painter.drawEllipse(QRectF(size.width() * 0.50, size.height() * 0.48,
+                               size.width() * 0.28, size.height() * 0.28));
+
+    return pixmap;
+}
+
+QWidget *createSidebarLogoWidget(QWidget *parent)
+{
+    auto *container = new QWidget(parent);
+    auto *layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 6);
+    layout->setSpacing(0);
+
+    auto *logoLabel = new QLabel(container);
+    logoLabel->setFixedSize(78, 78);
+    logoLabel->setPixmap(buildProgramLogoPixmap(logoLabel->size()));
+    logoLabel->setAlignment(Qt::AlignCenter);
+
+    layout->addStretch(1);
+    layout->addWidget(logoLabel, 0, Qt::AlignCenter);
+    layout->addStretch(1);
+
+    return container;
+}
+
 QString buildCalendarCellHtml(int day,
                               const QList<CalendarShiftVisual> &shiftLines,
                               bool showQuestionIcon,
@@ -171,13 +217,16 @@ QWidget *buildCalendarCellWidget(int day,
                                  const QList<CalendarShiftVisual> &shiftLines,
                                  bool showQuestionIcon,
                                  bool isToday,
+                                 bool isSelected,
                                  QWidget *parent)
 {
     auto *cellWidget = new QFrame(parent);
+    cellWidget->setObjectName("shiftCalendarCellFrame");
     cellWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    cellWidget->setStyleSheet(isToday
-        ? "background: transparent; border: 2px solid #F4BE5E; border-radius: 12px;"
-        : "background: transparent; border: none;");
+    const QString borderColor = isSelected ? "#5E81F4" : (isToday ? "#F4BE5E" : QString());
+    cellWidget->setStyleSheet(borderColor.isEmpty()
+        ? "QFrame#shiftCalendarCellFrame { background: transparent; border: none; }"
+        : QString("QFrame#shiftCalendarCellFrame { background: transparent; border: 2px solid %1; border-radius: 12px; }").arg(borderColor));
 
     auto *rootLayout = new QVBoxLayout(cellWidget);
     rootLayout->setContentsMargins(5, 4, 5, 4);
@@ -222,14 +271,16 @@ QWidget *buildCalendarCellWidget(int day,
         pillLayout->setSpacing(4);
 
         auto *accentBar = new QFrame(pillRow);
+        accentBar->setObjectName("shiftCalendarAccentBar");
         accentBar->setAttribute(Qt::WA_TransparentForMouseEvents, true);
         accentBar->setFixedSize(4, 34);
-        accentBar->setStyleSheet(QString("background:%1; border:none; border-radius:6px;").arg(accentColor));
+        accentBar->setStyleSheet(QString("QFrame#shiftCalendarAccentBar { background:%1; border:none; border-radius:6px; }").arg(accentColor));
 
         auto *backgroundFrame = new QFrame(pillRow);
+        backgroundFrame->setObjectName("shiftCalendarShiftPill");
         backgroundFrame->setAttribute(Qt::WA_TransparentForMouseEvents, true);
         backgroundFrame->setMinimumHeight(34);
-        backgroundFrame->setStyleSheet(QString("background:%1; border:none; border-radius:17px;").arg(fillColor));
+        backgroundFrame->setStyleSheet(QString("QFrame#shiftCalendarShiftPill { background:%1; border:none; border-radius:17px; }").arg(fillColor));
         auto *backgroundLayout = new QHBoxLayout(backgroundFrame);
         backgroundLayout->setContentsMargins(9, 0, 9, 0);
         backgroundLayout->setSpacing(0);
@@ -378,6 +429,7 @@ BusinessMainWindow::BusinessMainWindow(QWidget *parent)
     , ui(new Ui::BusinessMainWindow)
 {
     ui->setupUi(this);
+    ui->sidebarLayout->insertWidget(0, createSidebarLogoWidget(ui->sidebarFrame));
     setupNavigation();
     setupShiftsSection();
     setupStaffSection();
@@ -395,6 +447,7 @@ BusinessMainWindow::BusinessMainWindow(int currentUserId, int businessId, QWidge
     , ui(new Ui::BusinessMainWindow)
 {
     ui->setupUi(this);
+    ui->sidebarLayout->insertWidget(0, createSidebarLogoWidget(ui->sidebarFrame));
     this->currentUserId = currentUserId;
     currentBusinessId = businessId;
 
@@ -428,8 +481,9 @@ bool BusinessMainWindow::eventFilter(QObject *watched, QEvent *event)
     if (watched && watched->property("shiftCellDate").isValid() && event->type() == QEvent::MouseButtonPress)
     {
         currentShiftDate = watched->property("shiftCellDate").toDate();
+        hasSelectedShiftDate = true;
+        loadShiftMonthCalendar();
         loadShiftDayView();
-        loadShiftMonthDetails();
         return true;
     }
 
@@ -1053,6 +1107,34 @@ void BusinessMainWindow::applyWindowStyles()
             color: #8181A5;
             font-size: 14px;
             font-weight: 600;
+        }
+        QPushButton:disabled,
+        QToolButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:disabled,
+        QComboBox:disabled,
+        QDateEdit:disabled,
+        QTextEdit:disabled,
+        QSpinBox:disabled,
+        QDoubleSpinBox:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:read-only,
+        QTextEdit:read-only {
+            background: #F6F7FB;
+            color: #8E94A6;
+            border: 1px solid #E4E8F2;
+        }
+        QListWidget:disabled,
+        QTableWidget:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
         }
     )");
     setStyleSheet(windowStyle.arg(chevronPath));
@@ -1916,6 +1998,7 @@ void BusinessMainWindow::loadShiftMonthCalendar()
         item->setToolTip(QString());
 
         const bool isToday = (cellDate == QDate::currentDate());
+        const bool isSelected = hasSelectedShiftDate && (cellDate == currentShiftDate);
         if (isToday)
         {
             item->setBackground(QColor("#FFFFFF"));
@@ -1924,7 +2007,7 @@ void BusinessMainWindow::loadShiftMonthCalendar()
 
         shiftMonthTable->setItem(row, column, item);
 
-        auto *cellWidget = buildCalendarCellWidget(day, visibleShiftLines, tooltipOnly, isToday, shiftMonthTable);
+        auto *cellWidget = buildCalendarCellWidget(day, visibleShiftLines, tooltipOnly, isToday, isSelected, shiftMonthTable);
         cellWidget->setProperty("shiftTooltipWidget", tooltipOnly);
         cellWidget->setProperty("shiftTooltipText", tooltipOnly ? fullText : QString());
         cellWidget->setProperty("shiftCellDate", cellDate);
@@ -1943,7 +2026,8 @@ void BusinessMainWindow::loadShiftMonthDetails()
     if (!shiftMonthDetailsDateLabel || !shiftMonthDetailsBadgeLabel || !shiftMonthDetailsListLayout)
         return;
 
-    shiftMonthDetailsDateLabel->setText(currentShiftDate.toString("dd MMMM, dddd"));
+    const QLocale russianLocale(QLocale::Russian, QLocale::Russia);
+    shiftMonthDetailsDateLabel->setText(russianLocale.toString(currentShiftDate, "dd MMMM, dddd"));
 
     while (shiftMonthDetailsListLayout->count() > 0)
     {
@@ -2741,7 +2825,6 @@ QString BusinessMainWindow::buildShiftNotificationText(int shiftId) const
     if (!comment.isEmpty())
         lines << QString("Комментарий: %1").arg(comment);
 
-    lines << QString("Для отклика нажмите кнопку в VK-боте или отправьте: Хочу смену %1").arg(shiftId);
     return lines.join("\n");
 }
 
@@ -3462,29 +3545,6 @@ void BusinessMainWindow::setupSettingsSection()
         titleLabel->setFont(titleFont);
         titleLabel->setObjectName("sectionTitleLabel");
 
-        auto *descriptionLabel = new QLabel(
-            QString::fromUtf8("VK-бот теперь является единым сервисом системы. Администратор предприятия не настраивает токены и API, а только включает уведомления и дает сотрудникам ссылку на бота."),
-            settingsFrame);
-        descriptionLabel->setObjectName("settingsDescriptionLabel");
-        descriptionLabel->setWordWrap(true);
-
-        auto *botFrame = new QFrame(settingsFrame);
-        botFrame->setObjectName("settingsBotCard");
-        auto *botLayout = new QVBoxLayout(botFrame);
-        botLayout->setContentsMargins(16, 16, 16, 16);
-        auto *botTitleLabel = new QLabel(QString::fromUtf8("Единый VK-бот системы"), botFrame);
-        QFont botTitleFont = botTitleLabel->font();
-        botTitleFont.setBold(true);
-        botTitleLabel->setFont(botTitleFont);
-        botTitleLabel->setObjectName("sectionTitleLabel");
-        auto *botInfoLabel = new QLabel(
-            QString::fromUtf8("Все предприятия используют один общий VK-бот. Сотрудники пишут боту один раз, после этого система сможет отправлять им уведомления о сменах, объявлениях и выплатах."),
-            botFrame);
-        botInfoLabel->setObjectName("sectionInfoLabel");
-        botInfoLabel->setWordWrap(true);
-        botLayout->addWidget(botTitleLabel);
-        botLayout->addWidget(botInfoLabel);
-
         auto *formLayout = new QFormLayout();
         vkEnabledCheckBox = new QCheckBox(QString::fromUtf8("VK-уведомления включены"), settingsFrame);
         vkGroupIdEdit = new QLineEdit(settingsFrame);
@@ -3521,8 +3581,6 @@ void BusinessMainWindow::setupSettingsSection()
         vkConnectionStatusLabel->setWordWrap(true);
 
         settingsLayout->addWidget(titleLabel);
-        settingsLayout->addWidget(descriptionLabel);
-        settingsLayout->addWidget(botFrame);
         settingsLayout->addLayout(formLayout);
         settingsLayout->addLayout(buttonsLayout);
         settingsLayout->addWidget(vkConnectionStatusLabel);
@@ -4206,7 +4264,7 @@ void BusinessMainWindow::onSendMessageClicked()
     QString sendStatus = "РћР¶РёРґР°РµС‚ VK";
     if (true)
     {
-        const QList<int> vkIds = isNewShiftMessage
+        const QList<int> vkIds = isNewShiftMessage && recipientCode == "all"
             ? DatabaseManager::instance().getVkRecipientIdsForShiftOpenPositions(currentBusinessId, shiftId)
             : DatabaseManager::instance().getVkRecipientIds(
                   currentBusinessId,
@@ -4215,7 +4273,7 @@ void BusinessMainWindow::onSendMessageClicked()
                   recipientPositionName
                   );
 
-        const QList<int> assignedVkIdsForShift = isNewShiftMessage
+        const QList<int> assignedVkIdsForShift = isNewShiftMessage && recipientCode == "all"
             ? DatabaseManager::instance().getAssignedShiftVkRecipientIds(shiftId)
             : QList<int>();
 
@@ -4230,9 +4288,47 @@ void BusinessMainWindow::onSendMessageClicked()
             userIds.append(vkId);
 
         QJsonArray openPositionsJson;
-        const QList<ShiftOpenPositionData> openPositions = isNewShiftMessage
+        QList<ShiftOpenPositionData> openPositions = isNewShiftMessage
             ? DatabaseManager::instance().getShiftOpenPositions(shiftId)
             : QList<ShiftOpenPositionData>();
+        if (isNewShiftMessage && recipientCode == "position")
+        {
+            QList<ShiftOpenPositionData> filteredOpenPositions;
+            for (const ShiftOpenPositionData& openPosition : openPositions)
+            {
+                if (openPosition.positionName.compare(recipientPositionName, Qt::CaseInsensitive) == 0)
+                    filteredOpenPositions.append(openPosition);
+            }
+            openPositions = filteredOpenPositions;
+        }
+        else if (isNewShiftMessage && recipientCode == "employee" && recipientEmployeeId > 0)
+        {
+            QSet<QString> allowedPositions;
+            QSqlQuery employeeQuery = DatabaseManager::instance().getEmployeeById(recipientEmployeeId);
+            if (employeeQuery.next())
+            {
+                const QString employeePosition = employeeQuery.value("position").toString().trimmed();
+                if (!employeePosition.isEmpty())
+                {
+                    allowedPositions.insert(employeePosition.toCaseFolded());
+                    const QStringList coveredPositions =
+                        DatabaseManager::instance().getCoveredPositionNamesByPositionName(currentBusinessId, employeePosition);
+                    for (const QString& coveredPosition : coveredPositions)
+                        allowedPositions.insert(coveredPosition.trimmed().toCaseFolded());
+                }
+            }
+
+            if (!allowedPositions.isEmpty())
+            {
+                QList<ShiftOpenPositionData> filteredOpenPositions;
+                for (const ShiftOpenPositionData& openPosition : openPositions)
+                {
+                    if (allowedPositions.contains(openPosition.positionName.trimmed().toCaseFolded()))
+                        filteredOpenPositions.append(openPosition);
+                }
+                openPositions = filteredOpenPositions;
+            }
+        }
         for (const ShiftOpenPositionData& openPosition : openPositions)
         {
             QJsonObject item;

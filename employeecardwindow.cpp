@@ -305,6 +305,25 @@ void EmployeeCardWindow::buildUi()
             background: #E9EDFB;
             color: #5E81F4;
         }
+        QPushButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:disabled,
+        QComboBox:disabled,
+        QDateEdit:disabled,
+        QTextEdit:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:read-only,
+        QTextEdit:read-only {
+            background: #F6F7FB;
+            color: #8E94A6;
+            border: 1px solid #E4E8F2;
+        }
         QLabel {
             color: #1C1D21;
             font-size: 14px;

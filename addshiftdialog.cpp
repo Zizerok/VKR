@@ -1,10 +1,14 @@
 #include "addshiftdialog.h"
 
+#include <QCoreApplication>
 #include <QComboBox>
+#include <QAbstractSpinBox>
 #include <QDate>
 #include <QDateEdit>
 #include <QDateTime>
+#include <QDir>
 #include <QDoubleValidator>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -13,6 +17,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QTextEdit>
 #include <QTime>
@@ -21,6 +26,26 @@
 
 namespace
 {
+QString assetPath(const QString &fileName)
+{
+    const QStringList candidates = {
+        QDir::currentPath() + "/assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/../assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/../../assets/" + fileName,
+        QCoreApplication::applicationDirPath() + "/../../../assets/" + fileName,
+        "C:/Users/Dmitrii/Documents/VKR_2/assets/" + fileName
+    };
+
+    for (const QString &candidate : candidates)
+    {
+        if (QFileInfo::exists(candidate))
+            return QDir::cleanPath(candidate);
+    }
+
+    return QString();
+}
+
 QString paymentSummary(const QString& paymentType,
                        const QString& hourlyRate,
                        const QString& fixedRate,
@@ -42,9 +67,12 @@ QString paymentSummary(const QString& paymentType,
 
 void styleShiftMessageBox(QMessageBox& box, QMessageBox::Icon icon, const QString& title, const QString& text)
 {
+    Q_UNUSED(icon);
+
     box.setWindowTitle(title);
-    box.setText(text);
-    box.setIcon(icon);
+    box.setIcon(QMessageBox::NoIcon);
+    box.setText(title);
+    box.setInformativeText(text);
     box.setStandardButtons(QMessageBox::Ok);
     if (box.button(QMessageBox::Ok))
         box.button(QMessageBox::Ok)->setText("Понятно");
@@ -55,11 +83,24 @@ void styleShiftMessageBox(QMessageBox& box, QMessageBox::Icon icon, const QStrin
         QMessageBox QLabel {
             color: #1C1D21;
             font-size: 14px;
-            min-width: 340px;
+            min-width: 260px;
+            max-width: 320px;
+            qproperty-alignment: AlignCenter;
+        }
+        QMessageBox QLabel#qt_msgbox_label {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1C1D21;
+            qproperty-alignment: AlignCenter;
+        }
+        QMessageBox QLabel#qt_msgbox_informativelabel {
+            color: #8181A5;
+            font-size: 13px;
+            qproperty-alignment: AlignCenter;
         }
         QMessageBox QPushButton {
-            min-width: 110px;
-            min-height: 38px;
+            min-width: 120px;
+            min-height: 40px;
             border-radius: 12px;
             background: #5E81F4;
             color: white;
@@ -71,6 +112,14 @@ void styleShiftMessageBox(QMessageBox& box, QMessageBox::Icon icon, const QStrin
             background: #4E73EB;
         }
     )");
+
+    for (QLabel *label : box.findChildren<QLabel*>())
+    {
+        label->setAlignment(Qt::AlignCenter);
+        label->setWordWrap(true);
+        label->setMinimumWidth(260);
+        label->setMaximumWidth(320);
+    }
 }
 
 void showShiftWarning(QWidget *parent, const QString& title, const QString& text)
@@ -116,12 +165,24 @@ void AddShiftDialog::buildUi()
     const bool editMode = currentShiftId > 0;
 
     setWindowTitle(editMode ? "Редактирование смены" : "Создание смены");
-    resize(1040, 880);
+    resize(940, 700);
+    setMinimumSize(820, 540);
+    setSizeGripEnabled(true);
     setModal(true);
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(24, 24, 24, 24);
-    mainLayout->setSpacing(18);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(12);
+
+    auto *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    auto *contentWidget = new QWidget(scrollArea);
+    auto *contentWrapperLayout = new QVBoxLayout(contentWidget);
+    contentWrapperLayout->setContentsMargins(0, 0, 0, 0);
+    contentWrapperLayout->setSpacing(18);
 
     auto *titleLabel = new QLabel(editMode ? "Редактирование смены" : "Новая смена", this);
     titleLabel->setObjectName("dialogTitleLabel");
@@ -147,16 +208,19 @@ void AddShiftDialog::buildUi()
     startTimeEdit = new QTimeEdit(this);
     startTimeEdit->setDisplayFormat("HH:mm");
     startTimeEdit->setTime(QTime(9, 0));
+    startTimeEdit->setButtonSymbols(QAbstractSpinBox::NoButtons);
 
     endTimeEdit = new QTimeEdit(this);
     endTimeEdit->setDisplayFormat("HH:mm");
     endTimeEdit->setTime(QTime(18, 0));
+    endTimeEdit->setButtonSymbols(QAbstractSpinBox::NoButtons);
 
     statusComboBox = new QComboBox(this);
     statusComboBox->addItems({"Запланирована", "Выполнена", "Отменена"});
 
     commentEdit = new QTextEdit(this);
-    commentEdit->setMinimumHeight(96);
+    commentEdit->setMinimumHeight(84);
+    commentEdit->setMaximumHeight(120);
 
     createdAtEdit = new QLineEdit(this);
     createdAtEdit->setReadOnly(true);
@@ -224,6 +288,7 @@ void AddShiftDialog::buildUi()
     assignedListWidget->setAlternatingRowColors(false);
     assignedListWidget->setFocusPolicy(Qt::NoFocus);
     assignedListWidget->setSpacing(8);
+    assignedListWidget->setMinimumHeight(170);
 
     assignedFrameLayout->addWidget(assignedTitle);
     assignedFrameLayout->addLayout(assignedForm);
@@ -247,6 +312,7 @@ void AddShiftDialog::buildUi()
     openCountSpinBox = new QSpinBox(this);
     openCountSpinBox->setMinimum(1);
     openCountSpinBox->setMaximum(100);
+    openCountSpinBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
     openPaymentTypeComboBox = new QComboBox(this);
     openPaymentTypeComboBox->addItems(
         {"Почасовая", "Фиксированная ставка", "Процент", "Ставка + процент"});
@@ -279,6 +345,7 @@ void AddShiftDialog::buildUi()
     openListWidget->setAlternatingRowColors(false);
     openListWidget->setFocusPolicy(Qt::NoFocus);
     openListWidget->setSpacing(8);
+    openListWidget->setMinimumHeight(170);
 
     openFrameLayout->addWidget(openTitle);
     openFrameLayout->addLayout(openForm);
@@ -321,13 +388,19 @@ void AddShiftDialog::buildUi()
         saveShift();
     });
 
-    mainLayout->addWidget(titleLabel);
-    mainLayout->addWidget(subtitleLabel);
-    mainLayout->addWidget(baseFrame);
-    mainLayout->addLayout(contentLayout, 1);
+    contentWrapperLayout->addWidget(titleLabel);
+    contentWrapperLayout->addWidget(subtitleLabel);
+    contentWrapperLayout->addWidget(baseFrame);
+    contentWrapperLayout->addLayout(contentLayout, 1);
+    contentWrapperLayout->addStretch(1);
+
+    scrollArea->setWidget(contentWidget);
+
+    mainLayout->addWidget(scrollArea, 1);
     mainLayout->addWidget(saveButton);
 
-    setStyleSheet(R"(
+    const QString chevronPath = assetPath("chevron-down.svg").replace("\\", "/");
+    setStyleSheet(QString(R"(
         QDialog {
             background: #F6F6FB;
         }
@@ -358,6 +431,13 @@ void AddShiftDialog::buildUi()
             color: #1C1D21;
             font-size: 14px;
         }
+        QScrollArea {
+            background: transparent;
+            border: none;
+        }
+        QScrollArea > QWidget > QWidget {
+            background: transparent;
+        }
         QTextEdit {
             padding-top: 12px;
             padding-bottom: 12px;
@@ -385,9 +465,54 @@ void AddShiftDialog::buildUi()
         QComboBox::drop-down, QDateEdit::drop-down {
             width: 28px;
             border: none;
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
         }
         QComboBox::down-arrow, QDateEdit::down-arrow {
+            image: url(%1);
+            width: 12px;
+            height: 12px;
+        }
+        QSpinBox::up-button, QSpinBox::down-button {
+            width: 24px;
+            border: none;
+            background: transparent;
+            subcontrol-origin: border;
+        }
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+            background: #F3F5FC;
+            border-radius: 8px;
+        }
+        QSpinBox::up-arrow {
             image: none;
+            width: 0px;
+            height: 0px;
+        }
+        QSpinBox::down-arrow {
+            image: url(%1);
+            width: 10px;
+            height: 10px;
+        }
+        QScrollBar:vertical {
+            background: transparent;
+            width: 12px;
+            margin: 4px 0 4px 0;
+        }
+        QScrollBar::handle:vertical {
+            background: #D7E2FF;
+            min-height: 46px;
+            border-radius: 6px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: #C1D2FF;
+        }
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical,
+        QScrollBar::add-page:vertical,
+        QScrollBar::sub-page:vertical {
+            background: transparent;
+            border: none;
+            height: 0px;
         }
         QPushButton {
             min-height: 42px;
@@ -416,7 +541,33 @@ void AddShiftDialog::buildUi()
             background: #F3F4F8;
             color: #8181A5;
         }
-    )");
+        QPushButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:disabled,
+        QComboBox:disabled,
+        QSpinBox:disabled,
+        QDateEdit:disabled,
+        QTimeEdit:disabled,
+        QTextEdit:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:read-only,
+        QTextEdit:read-only {
+            background: #F6F7FB;
+            color: #8E94A6;
+            border: 1px solid #E4E8F2;
+        }
+        QListWidget:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+    )").arg(chevronPath));
 
     updatePaymentFields(
         assignedPaymentTypeComboBox,
@@ -549,8 +700,18 @@ void AddShiftDialog::addAssignedEmployee()
         return;
     }
 
+    const int selectedEmployeeId = assignedEmployeeComboBox->currentData().toInt();
+    for (const ShiftAssignedEmployeeData &assignment : assignedEmployees)
+    {
+        if (assignment.employeeId == selectedEmployeeId)
+        {
+            showShiftWarning(this, "Ошибка", "Этот сотрудник уже назначен на данную смену.");
+            return;
+        }
+    }
+
     ShiftAssignedEmployeeData item;
-    item.employeeId = assignedEmployeeComboBox->currentData().toInt();
+    item.employeeId = selectedEmployeeId;
     item.employeeName = assignedEmployeeComboBox->currentText();
     item.positionName = assignedPositionComboBox->currentText();
     item.paymentType = assignedPaymentTypeComboBox->currentText();
@@ -625,6 +786,18 @@ void AddShiftDialog::saveShift()
             "Ошибка",
             "Добавьте хотя бы одного назначенного сотрудника или одну свободную позицию.");
         return;
+    }
+
+    for (int i = 0; i < assignedEmployees.size(); ++i)
+    {
+        for (int j = i + 1; j < assignedEmployees.size(); ++j)
+        {
+            if (assignedEmployees.at(i).employeeId == assignedEmployees.at(j).employeeId)
+            {
+                showShiftWarning(this, "Ошибка", "Один сотрудник не может быть назначен на одну смену несколько раз.");
+                return;
+            }
+        }
     }
 
     bool ok = false;

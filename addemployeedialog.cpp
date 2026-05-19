@@ -220,6 +220,23 @@ AddEmployeeDialog::AddEmployeeDialog(int businessId, QWidget *parent)
             background: #E9EDFB;
             color: #5E81F4;
         }
+        QPushButton:disabled {
+            background: #EEF0F6;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:disabled,
+        QComboBox:disabled,
+        QDateEdit:disabled {
+            background: #F3F4F8;
+            color: #A8ADBD;
+            border: 1px solid #E1E5F0;
+        }
+        QLineEdit:read-only {
+            background: #F6F7FB;
+            color: #8E94A6;
+            border: 1px solid #E4E8F2;
+        }
     )");
 }
 
@@ -234,6 +251,10 @@ void AddEmployeeDialog::saveEmployee()
         return;
     }
 
+    const QString selectedPosition = positionComboBox->currentIndex() > 0
+                                         ? positionComboBox->currentText().trimmed()
+                                         : QString();
+
     const bool ok = DatabaseManager::instance().createEmployee(
         currentBusinessId,
         lastName,
@@ -243,7 +264,7 @@ void AddEmployeeDialog::saveEmployee()
         genderComboBox->currentText(),
         phoneEdit->text(),
         vkIdEdit->text(),
-        positionComboBox->currentText());
+        selectedPosition);
 
     if (!ok)
     {
